@@ -4,6 +4,10 @@
 
 | Estágio | Script | Skill upstream base | Bloqueia se falhar? |
 |---|---|---|---|
+| Criar o site | `init-site.sh` | scaffolder oficial `create-emdash`; `scripts/sync-templates-repo.mjs` (versões) | Sim (exit 1/2) |
+| Provisionar | `provision.sh` | `core-migrations.mdx` ("Provision D1 before migrating it") | Sim (exit 1/3) |
+| Workflows | `install-workflows.sh` | — (templates desta skill) | Sim em `--check` (exit 1) |
+| **Tudo, em ordem** | **`pipeline.sh check\|status\|deploy`** | orquestra os estágios abaixo; é o que CI e Deploy chamam | Sim — devolve o exit do estágio que falhou |
 | Preflight | `preflight.sh` | `building-emdash-site` (bindings/entry point) | Sim (exit 1/2) |
 | Dev | `gate-local.sh` | espelha `ci.yml` upstream, adaptado aos scripts que o projeto define (site scaffolded: só typecheck; monorepo/toolchain completa: format, lint, unit, browser, e2e opcional) + `emdash doctor --json` (em D1, a falha `database` é esperada e desconsiderada) | Sim (exit 1) |
 | Review | (skill, não script) | `adversarial-reviewer` | Sim — findings Critical/High |
@@ -25,6 +29,8 @@ Review e acceptance são executados **pelo agente lendo a skill upstream** — d
 | `EMDASH_TARGET_FINGERPRINT` | deploy | Fingerprint revisado localmente (migrate não-interativo). Sem ela, o migrate é interativo e pede confirmação do alvo |
 | `EMDASH_D1_NAME` | backup | Nome do banco (default: lido do wrangler.jsonc) |
 | `EMDASH_DEPLOY_URL` | postdeploy | URL pública a verificar — **obrigatória** (ou `--url`). Não há default: o endereço real é `<worker>.<subdomínio-da-conta>.workers.dev` ou o domínio próprio |
+| `EMDASH_CICD_ENCRYPTION_KEY` | pipeline (deploy) | Se definida, é enviada ao Worker como secret `EMDASH_ENCRYPTION_KEY` após o deploy. Nome diferente de propósito: assim a chave não entra no ambiente do build |
+| `EMDASH_CICD_EVIDENCE_DIR` | pipeline (deploy) | Diretório, fora do checkout, onde os logs são copiados para o CI guardar como artefato |
 | `EMDASH_CICD_E2E=1` | gate-local | Inclui `test:e2e` (Playwright) nos gates |
 | `EMDASH_CICD_R2_BACKUP=1` | backup | Inclui sync dos objetos R2 (exige AWS CLI + credenciais read-only) |
 | `EMDASH_HEADERS` | emdash-cli remoto | Headers de auth para instância atrás de proxy (skill emdash-cli upstream) |

@@ -11,7 +11,7 @@ O substrato já existe e é aberto: o [EmDash](https://github.com/emdash-cms/emd
 | O quê | Situação |
 |---|---|
 | Documentação (v2) | Pronta — [`docs/`](docs/README.md) |
-| Skill do pipeline `emdash-cicd` | v1.3.0 — [`skills/emdash-cicd/`](skills/emdash-cicd/SKILL.md). Preflight e gates já rodaram de verdade; backup, deploy e pós-deploy ainda não |
+| Skill do pipeline `emdash-cicd` | v1.4.0 — [`skills/emdash-cicd/`](skills/emdash-cicd/SKILL.md). Cria o site, provisiona, instala os workflows e roda o pipeline por comando. Os checks já rodam de verdade; backup, deploy e pós-deploy ainda não |
 | Site EmDash (o Worker) | Criado na raiz (EmDash 1.5.0, sandbox ligado). Build e gates passam. **Ainda não publicado** |
 | Recursos Cloudflare | D1 `hector-ai-platform` e R2 `hector-ai-platform-media` criados. Worker ainda não |
 | Workflows do GitHub Actions | [`ci.yml`](.github/workflows/ci.yml) (gates em todo push) e [`deploy.yml`](.github/workflows/deploy.yml) (manual) |
@@ -38,11 +38,11 @@ README.md              esta página
 astro.config.mjs       ┐
 wrangler.jsonc         │ o site EmDash — um Worker
 src/  seed/            ┘ (template starter-cloudflare; aqui só mudam nomes e o sandbox)
-.github/workflows/     CI (gates) e Deploy (manual), ambos chamando a skill
+.github/workflows/     CI e Deploy — gerados pela skill, cada um chama pipeline.sh
 .agents/skills/        skills oficiais do EmDash que vêm com o template
 AGENTS.md              regras e contexto para qualquer agente que continue o trabalho
 docs/                  documentação viva (versionada em docs/CHANGELOG.md)
   origem/2026-11-13/   os documentos originais, intocados — a referência histórica
-skills/emdash-cicd/    o pipeline como código: 6 scripts + contrato + changelog
+skills/emdash-cicd/    o pipeline como código: scripts, templates dos workflows, contrato, changelog
 .claude/skills/        atalho para a skill, para o Claude Code carregá-la sozinho
 ```

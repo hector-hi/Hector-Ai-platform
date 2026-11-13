@@ -1,0 +1,32 @@
+# GERADO pela skill emdash-cicd (scripts/install-workflows.sh) — não editar aqui.
+# Fonte: __SKILL__/templates/workflows/ci.yml
+#
+# Em todo push e pull request: os checks de desenvolvimento e integração.
+# O workflow não tem regra própria — chama `pipeline.sh check`, o mesmo comando que se
+# roda localmente e o mesmo que o Deploy executa antes de publicar.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: pipeline.sh check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: __SKILL__/scripts/pipeline.sh check

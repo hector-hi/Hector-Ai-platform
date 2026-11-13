@@ -4,6 +4,8 @@ O roteiro, na ordem. O porquê de cada escolha está em [`01-arquitetura.md`](01
 
 **Estado em 13/11/2026:** a Fase 1 foi executada até o passo 1.3 (site criado, banco e bucket provisionados, gates verdes). O passo 1.4 em diante — o deploy — ainda não rodou. As fases 3 a 5 são plano, não relato.
 
+> **Atalho:** as fases 1 e 2 são comandos da skill `emdash-cicd` — `init-site.sh`, `provision.sh`, `install-workflows.sh`, `pipeline.sh`. O roteiro executável, passo a passo, é [`primeiro-deploy.md`](../skills/emdash-cicd/references/primeiro-deploy.md). Este documento explica o que esses comandos fazem e por quê.
+
 ## Visão geral
 
 | Fase | O quê | Esforço | Precisa de |
@@ -295,8 +297,10 @@ Só nomes nos arquivos. Valores em secret do Worker, secret do GitHub ou gerenci
 
 Este repositório tem dois workflows, e os dois chamam os scripts da skill:
 
-- [`ci.yml`](../.github/workflows/ci.yml) — em todo push: preflight, build, gates, ensaio de deploy.
-- [`deploy.yml`](../.github/workflows/deploy.yml) — manual, com duas ações: `status` (só inspeciona o alvo e mostra o fingerprint) e `deploy` (pipeline completo, com backup antes da migration).
+- [`ci.yml`](../.github/workflows/ci.yml) — em todo push: `pipeline.sh check` (preflight, build, gates, ensaio de deploy).
+- [`deploy.yml`](../.github/workflows/deploy.yml) — manual, com duas ações: `status` (`pipeline.sh status`: só inspeciona o alvo e mostra o fingerprint) e `deploy` (`pipeline.sh deploy`: os mesmos checks do CI e, se passarem, backup, migration, deploy e verificação).
+
+Os dois arquivos são gerados pela skill (`install-workflows.sh`); não se editam à mão.
 
 **Para o primeiro deploy**, no GitHub, em *Settings → Secrets and variables → Actions*:
 

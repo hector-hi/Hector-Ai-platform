@@ -2,6 +2,34 @@
 
 Toda mudança nesta skill exige: (1) edição em SKILL.md/scripts/references, (2) bump de `version` no frontmatter do SKILL.md, (3) entrada aqui, na mesma mudança. Format: `Keep a Changelog`, semântica simples MAJOR.MINOR.PATCH (procedimento novo = MINOR, ajuste = PATCH, quebra de contrato de script = MAJOR).
 
+## [1.4.0] — 2026-11-13
+
+A skill passa a conter, como comandos, tudo o que na sessão de 13/11 foi feito à mão: criar o site, provisionar, montar os workflows e encadear os estágios. Gap declarado pelo Hector: "que a skill contivesse esses comandos, para o agente não ter de fazer na mão e eu não ter de descrever toda vez; e o deploy apenas um primeiro CI, passando pelos mesmos checks".
+
+### Added
+- `scripts/pipeline.sh check|status|deploy` — o pipeline inteiro num comando. `deploy` começa pelo mesmo `check` que o CI roda; não existe caminho de deploy que pule os checks. Registra o run record sempre, inclusive em falha.
+- `scripts/init-site.sh` — cria o site pelo scaffolder oficial, ou de um checkout local do EmDash (`--from-upstream`) quando o scaffolder não alcança a rede. Aplica nomes, liga o sandbox (incluindo `sandboxRunner`, que o scaffolder não acrescenta), ajusta `.gitignore`, instala dependências.
+- `scripts/provision.sh` — cria D1 e R2 de forma idempotente e fixa o `database_id`. Modo `--check`.
+- `scripts/install-workflows.sh` + `templates/workflows/` — os workflows passam a ser gerados pela skill; modo `--check` detecta edição manual.
+- `scripts/lib/site-config.mjs` — leitura e ajuste de `wrangler.jsonc`/`astro.config.mjs`, usado pelos scripts acima.
+- `references/primeiro-deploy.md` — roteiro do zero ao ar, com os três passos humanos e um quadro de falhas.
+- SKILL.md seção 0: os comandos na ordem, e a regra de que o agente roda o script em vez de refazer os passos.
+- Workflow de deploy aceita o fingerprint como campo ao disparar (além da variável).
+
+### Changed
+- `ci.yml` e `deploy.yml` reduzidos a uma chamada de `pipeline.sh` cada. A lógica que estava nos YAML (extração de URL, secret da chave, resumo do job) foi para o script.
+- A chave de criptografia chega ao pipeline como `EMDASH_CICD_ENCRYPTION_KEY`, para não entrar no ambiente do build.
+
+### Testado
+- `init-site.sh --from-upstream`: recriou o site numa pasta vazia; `wrangler.jsonc`, `astro.config.mjs`, `pnpm-workspace.yaml` e `.gitignore` idênticos aos do site real.
+- `pipeline.sh check`: seis estágios, exit 0, localmente.
+- Caminhos de falha sem credenciais: `status` e `deploy` saem com 3; `deploy` grava o run record mesmo falhando.
+
+### Não testado (falta acesso à API da Cloudflare a partir de onde a skill foi escrita)
+- `provision.sh` criando recursos: os comandos e flags do Wrangler foram conferidos pelo `--help`; a execução, não. Em 13/11 o D1 e o R2 foram criados por conector MCP.
+- `init-site.sh` pelo caminho do scaffolder: o scaffolder roda, mas não alcançou `github.com/emdash-cms/templates` daquele ambiente.
+- `pipeline.sh status` e `deploy` com credenciais: dependem do primeiro deploy.
+
 ## [1.3.0] — 2026-11-13
 
 Primeira execução real de `preflight.sh` e `gate-local.sh`, contra o site criado neste repositório (EmDash 1.5.0). `backup-point.sh`, `deploy.sh` e `postdeploy.sh` **continuam sem run real** — dependem do primeiro deploy.

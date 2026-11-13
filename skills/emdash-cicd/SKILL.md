@@ -1,7 +1,7 @@
 ---
 name: emdash-cicd
-description: Orquestrar o pipeline de desenvolvimento, integração e deploy de um site EmDash em Cloudflare Workers, executando os gates de qualidade como código (preflight, gates locais, ponto de backup, deploy com migrations, verificação pós-deploy e retrospectiva). Baseia-se nas skills oficiais do repositório EmDash (building-emdash-site, emdash-cli, adversarial-reviewer, agent-browser, ux-acceptance-coordinator, upgrading-emdash) e as orquestra sem substituí-las. É uma SKILL VIVA: todo procedimento novo descoberto numa execução deve ser incorporado a ela via protocolo de atualização da seção "Skill Viva".
-version: 1.3.0
+description: Criar, provisionar, verificar e publicar um site EmDash em Cloudflare Workers com comandos prontos — do repositório vazio ao site no ar e a cada deploy seguinte. Usar sempre que for preciso criar o site, provisionar D1/R2, instalar os workflows de CI/Deploy, rodar os gates ou fazer deploy; os comandos estão em scripts/ e não devem ser refeitos à mão (init-site, provision, install-workflows, pipeline check|status|deploy, mais preflight, gates locais, ponto de backup, deploy com migrations, verificação pós-deploy e retrospectiva). Baseia-se nas skills oficiais do repositório EmDash (building-emdash-site, emdash-cli, adversarial-reviewer, agent-browser, ux-acceptance-coordinator, upgrading-emdash) e as orquestra sem substituí-las. É uma SKILL VIVA: todo procedimento novo descoberto numa execução deve ser incorporado a ela via protocolo de atualização da seção "Skill Viva".
+version: 1.4.0
 living-skill: true
 update-protocol: CHANGELOG-required
 upstream-base: emdash-cms/emdash (skills/ e .agents/skills/)
@@ -10,6 +10,33 @@ upstream-base: emdash-cms/emdash (skills/ e .agents/skills/)
 # EmDash CI/CD — pipeline vivo de desenvolvimento, integração e deploy
 
 Esta skill é o **contrato executável** do pipeline. As regras estão nos scripts (`scripts/`); os procedimentos estão aqui e nas skills upstream. Qualquer agente (Claude, ChatGPT/Codex, Perplexity Computer, cursor, etc.) que saiba ler skills e executar bash produz o **mesmo resultado de qualidade**, porque os gates são código, não prosa.
+
+## 0. Como usar — os comandos, na ordem
+
+**Regra para o agente:** se a tarefa é criar o site, provisionar, verificar ou publicar, o comando já existe abaixo. Rodar o script; não refazer os passos à mão, não reescrever o que ele faz. Se o script não cobre o caso, isso é um gap — incorporar (seção 4), não contornar.
+
+**Do zero ao ar** — roteiro completo, com os três passos que só o dono da conta pode dar, em [references/primeiro-deploy.md](references/primeiro-deploy.md):
+
+```bash
+scripts/init-site.sh --name <worker>     # 1. cria o site (scaffolder oficial; nomes; sandbox)
+scripts/provision.sh                     # 2. cria D1 + R2 e fixa o database_id
+scripts/install-workflows.sh             # 3. CI e Deploy no GitHub Actions
+scripts/pipeline.sh check                # 4. todos os checks de dev + integração
+# commit, push; token e conta no GitHub (humano); então, no Actions:
+#   Deploy → status   (mostra o alvo)   →   Deploy → deploy   (publica)
+```
+
+**No dia a dia** — três comandos, um caminho só:
+
+| Comando | O que faz | Toca a Cloudflare? |
+|---|---|---|
+| `scripts/pipeline.sh check` | preflight → build → gates → ensaio de deploy → integridade da skill → workflows em dia | Não |
+| `scripts/pipeline.sh status` | build + `emdash migrate --status`: mostra conta, banco e fingerprint | Só leitura |
+| `scripts/pipeline.sh deploy` | **tudo de `check`** e, se passar: backup → migrate → deploy → check → verificação → run record | Sim |
+
+O CI roda `pipeline.sh check`. O Deploy roda `pipeline.sh deploy`, que começa pelo mesmo `check`. Um deploy é um check que passou e seguiu em frente — o primeiro deploy é só a primeira vez que isso acontece, não um procedimento à parte.
+
+Os scripts de estágio (`preflight.sh`, `gate-local.sh`, `backup-point.sh`, `deploy.sh`, `postdeploy.sh`, `retro.sh`) continuam utilizáveis sozinhos, para depurar um estágio.
 
 ## 1. Relação com as skills do repositório EmDash (não substituir, orquestrar)
 
@@ -72,23 +99,17 @@ Toda execução termina com um run record em `runs/`. Se surgiram procedimentos 
 
 ## 3-A. O pipeline no GitHub Actions
 
-Os workflows em `.github/workflows/` **não têm regra própria** — eles chamam estes mesmos scripts. O que passa localmente passa no CI, e vice-versa.
+Os workflows são **gerados** pela skill: a fonte é `templates/workflows/`, e `scripts/install-workflows.sh` os escreve em `.github/workflows/`. Eles não têm regra própria — cada um é uma linha que chama `pipeline.sh`. `pipeline.sh check` falha se os arquivos instalados divergirem dos templates.
 
-| Workflow | Quando roda | O que faz |
+| Workflow | Quando roda | Comando |
 |---|---|---|
-| `ci.yml` | Todo push e pull request | Sintaxe dos scripts → `preflight.sh` → build → `gate-local.sh` → `wrangler deploy --dry-run` → confere version↔CHANGELOG da skill |
-| `deploy.yml`, ação `status` | Manual | Build + `emdash migrate --status`. Não muda nada. Publica o alvo e o fingerprint no resumo do job |
-| `deploy.yml`, ação `deploy` | Manual | `preflight.sh` → `gate-local.sh` → `deploy.sh` → secret da chave → `postdeploy.sh` → `retro.sh`; guarda `backups/`, o log e o run record como artefato por 90 dias |
+| `ci.yml` | Todo push e pull request | `pipeline.sh check` |
+| `deploy.yml`, ação `status` | Manual | `pipeline.sh status` — só leitura; publica o alvo e o fingerprint no resumo do job |
+| `deploy.yml`, ação `deploy` | Manual | `pipeline.sh deploy` — guarda `backups/`, logs e run record como artefato por 90 dias |
 
-Sequência do primeiro deploy (e de todo deploy em que o alvo mudar):
+Conferir o fingerprint antes do deploy é um passo humano de propósito: é a guarda contra migrar o banco errado. Só precisa ser refeito quando o alvo mudar. Não automatizar.
 
-1. Rodar **status**. Ler a conta e o banco no resumo do job.
-2. Se forem os certos, gravar o fingerprint na variável `EMDASH_TARGET_FINGERPRINT`.
-3. Rodar **deploy**.
-
-O passo 2 é humano de propósito: é a guarda contra migrar o banco errado. Não automatizar.
-
-No runner, os logs vão para `$RUNNER_TEMP`, fora do checkout — `deploy.sh` exige árvore limpa. Os run records gerados no CI ficam no artefato, não no repositório; os de execuções locais são commitados.
+Os logs vão para um diretório temporário fora do checkout (`deploy.sh` exige árvore limpa). Run records gerados no CI ficam no artefato; os de execuções locais são commitados.
 
 ## 4. Skill Viva — protocolo de atualização (parte do formato, não opcional)
 
@@ -105,6 +126,8 @@ Esta skill nasce com qualidade porque os gates são código; **permanece** com q
 
 | Arquivo | Conteúdo |
 |---|---|
+| [references/primeiro-deploy.md](references/primeiro-deploy.md) | Do zero ao ar: os dez passos, os três que são humanos, e o quadro de falhas |
+| `templates/workflows/` | Fonte dos workflows do GitHub Actions (instalados por `install-workflows.sh`) |
 | [references/pipeline-detail.md](references/pipeline-detail.md) | Detalhe de cada estágio, variáveis de ambiente e códigos de saída |
 | [CHANGELOG.md](CHANGELOG.md) | Histórico versionado da skill (obrigatório em toda mudança) |
 | `runs/` | Run records gerados por `retro.sh` |
@@ -113,13 +136,25 @@ Esta skill nasce com qualidade porque os gates são código; **permanece** com q
 ## 6. Comandos rápidos
 
 ```bash
-# No GitHub: Actions → Deploy → Run workflow → status | deploy
+# criar e preparar (uma vez)
+scripts/init-site.sh --name <worker>  # site a partir do template oficial
+scripts/provision.sh [--check]        # D1 + R2 + database_id no wrangler.jsonc
+scripts/install-workflows.sh          # .github/workflows/ a partir dos templates
+
+# o pipeline (sempre)
+scripts/pipeline.sh check             # dev + integração, sem tocar a Cloudflare
+scripts/pipeline.sh status            # alvo de migration e fingerprint (só leitura)
+scripts/pipeline.sh deploy            # check + backup + migrate + deploy + verify + retro
+
+# estágios isolados (depuração)
 scripts/preflight.sh                  # ambiente + projeto + bindings prontos?
-scripts/gate-local.sh                 # todos os gates locais (espelham ci.yml)
+scripts/gate-local.sh                 # typecheck, lint/testes se existirem, emdash doctor
 scripts/backup-point.sh               # bookmark Time Travel + evidências
 scripts/deploy.sh                     # build → migrate → deploy → check (serializado)
 scripts/postdeploy.sh --url <url>     # health + admin + migrate --check
 scripts/retro.sh                      # run record + validação skill viva
+
+node scripts/lib/site-config.mjs get|set-names|set-database-id|enable-sandbox|ignore-evidence
 ```
 
-Variáveis de ambiente (ver `references/pipeline-detail.md`): `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `EMDASH_TARGET_FINGERPRINT`, `EMDASH_DEPLOY_URL`, `EMDASH_D1_NAME`, `EMDASH_CICD_E2E`, `EMDASH_CICD_R2_BACKUP`.
+Variáveis de ambiente (ver `references/pipeline-detail.md`): `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `EMDASH_TARGET_FINGERPRINT`, `EMDASH_DEPLOY_URL`, `EMDASH_CICD_ENCRYPTION_KEY`, `EMDASH_CICD_EVIDENCE_DIR`, `EMDASH_D1_NAME`, `EMDASH_CICD_E2E`, `EMDASH_CICD_R2_BACKUP`.

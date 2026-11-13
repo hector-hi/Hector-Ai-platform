@@ -48,6 +48,8 @@ flowchart LR
 | A14 | **D3 — Sandbox ligado desde o primeiro deploy** | 13/11/2026 | Workers Paid ativo (A8); `LOADER` + `sandboxRunner: sandbox()` |
 | A15 | **A skill nossa vive em `skills/emdash-cicd/`**, com link em `.claude/skills/`. Fora de `.agents/skills/` | 13/11/2026 | `.agents/skills/` é território do `upgrade-emdash`; até saber como ele trata skills alheias, a nossa fica fora |
 
+| A16 | **A skill é o manual executável:** tudo o que se faz para criar, provisionar, verificar e publicar é um comando dela. O deploy começa pelos mesmos checks do CI | 13/11/2026 | Pedido do Hector. Skill v1.4.0: `init-site.sh`, `provision.sh`, `install-workflows.sh`, `pipeline.sh` |
+
 ### Consequência de A11 (domínio gratuito)
 
 Sem `EMDASH_SITE_URL`, o setup grava como origem do site o endereço em que ele roda, e **as passkeys criadas ali só funcionam naquele endereço**. Quando você trocar para um domínio próprio, as passkeys do `workers.dev` deixam de valer no endereço novo. Não é grave, mas tem de ser planejado: antes da troca, ter email configurado (para entrar por magic link) ou cadastrar uma passkey nova no domínio novo seguindo o guia "Move to a New Domain" do EmDash. **[doc: `deployment/cloudflare.mdx`]**
@@ -60,11 +62,13 @@ Em ordem de urgência. Cada uma traz a recomendação e o que ela destrava.
 
 **Credenciais da Cloudflare no GitHub.** Só você pode fazer; o passo a passo está em [`02-instalacao.md`](02-instalacao.md#o-deploy-no-github-actions).
 
-1. Criar um token de API na Cloudflare com: Workers Scripts — Edit; D1 — Edit; Workers R2 Storage — Edit; Workers KV Storage — Edit.
-2. No GitHub, em *Settings → Secrets and variables → Actions*: secret `CLOUDFLARE_API_TOKEN` e variável `CLOUDFLARE_ACCOUNT_ID`.
-3. Rodar o workflow **Deploy** com a ação `status`, conferir o alvo, gravar a variável `EMDASH_TARGET_FINGERPRINT`.
-4. Rodar o workflow **Deploy** com a ação `deploy`.
-5. **Imediatamente depois:** abrir `/_emdash/admin/` e concluir o setup. A primeira pessoa a terminar vira administradora.
+O roteiro inteiro, com tabelas, está na skill: [`primeiro-deploy.md`](../skills/emdash-cicd/references/primeiro-deploy.md). Os passos 1 a 6 já foram feitos. Faltam os seus:
+
+1. **Passo 2** — criar um token de API na Cloudflare (Workers Scripts, D1, Workers R2 Storage e Workers KV Storage, todos em Edit).
+2. **Passo 7** — no GitHub, em *Settings → Secrets and variables → Actions*: secret `CLOUDFLARE_API_TOKEN` e variável `CLOUDFLARE_ACCOUNT_ID`.
+3. **Passo 8** — *Actions → Deploy →* `status`.
+4. **Passo 9** — conferir conta e banco no resumo; *Deploy →* `deploy`, colando o fingerprint.
+5. **Passo 10** — **imediatamente depois**, abrir `/_emdash/admin/` e concluir o setup. A primeira pessoa a terminar vira administradora.
 
 **Chave de criptografia (`EMDASH_ENCRYPTION_KEY`).** Opcional no primeiro deploy; necessária antes de qualquer plugin guardar um setting secreto. Gera-se com `npx emdash secrets generate`; guarda-se como secret do GitHub (o workflow a envia ao Worker) **e** numa cópia sua, fora da Cloudflare.
 
@@ -77,6 +81,20 @@ Recomendação: nada no primeiro deploy; Cloudflare Email Sending logo depois �
 **D10 — Staging.**
 Ambiente nomeado com D1 e R2 próprios, ou Worker Previews? A diferença está em [`02-instalacao.md`](02-instalacao.md#staging-e-previews).
 Recomendação: ambiente nomeado `preview`, com recursos próprios. É onde o primeiro run real do pipeline deve acontecer — o risco R10 pede um alvo descartável. A skill precisa ganhar suporte a `--wrangler-env` antes; é uma lacuna registrada.
+
+**D11 — Cloudflare Artifacts.** *(novo — sugestão do Hector em 13/11)*
+
+O que é **[fonte: docs e blog da Cloudflare, lidos por busca em 13/11/2026; a página de documentação em si não era alcançável do ambiente de trabalho]**: armazenamento versionado que fala Git. Dentro da conta há *namespaces*, e em cada um, repositórios Git de verdade — clone, push e pull com qualquer cliente Git, mais API REST e binding de Worker para criar, bifurcar e emitir tokens por repositório. Exige Workers Paid (A8 atende). Está em **beta aberto** desde outubro de 2026; a cobrança começou em 12/11/2026 — 1 GB incluído, depois US$ 0,50/GB-mês, mais operações (os valores de operação que achei são de abril e podem ter mudado). O Wrangler do projeto já traz `wrangler artifacts namespaces|repos` **[código: `wrangler artifacts --help`, v4.160]**.
+
+Onde ele se encaixa aqui — três usos, do mais seguro ao mais ambicioso:
+
+1. **Livro de bordo do pipeline.** Hoje as evidências de cada deploy (bookmark do Time Travel, manifesto de migrations, logs, run record) viram um artefato do GitHub que expira em 90 dias. Num repositório Artifacts elas ficam versionadas, sem prazo, na mesma conta do site: um commit por deploy. É o encaixe mais direto com o que o produto é, e não é infra nossa — é um `git push` a mais no fim do `pipeline.sh deploy`.
+2. **Espelho do repositório.** Um segundo `git remote` na sua conta Cloudflare. Tira o GitHub da posição de cópia única do código e das decisões.
+3. **Um repositório por coisa cadastrada.** A Cloudflare recomenda justamente "um repositório por projeto, usuário, sessão ou tarefa". Casa com a suíte: cadastrar um `app` ou um `agent` poderia, por um passo do `registry-workflows`, criar o repositório dele. Um plugin sandboxed não tem binding de Worker; teria de usar a API REST com `network:request` restrito ao host da Cloudflare. Precisa de estudo antes de prometer.
+
+O que **não** é: não substitui o R2 (mídia é blob, não árvore versionada) nem o backup do banco.
+
+Recomendação: adotar o uso 1 agora, como passo opcional da skill (liga com uma variável; sem ela, tudo segue como está); o uso 2 junto; deixar o uso 3 registrado para quando a suíte começar. Ressalva: é beta — as evidências continuam indo também para o artefato do GitHub até o produto estabilizar. **Espero o seu sim para implementar.**
 
 ### Só se você quiser as fases 3 a 5
 

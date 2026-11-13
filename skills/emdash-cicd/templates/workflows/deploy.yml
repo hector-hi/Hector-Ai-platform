@@ -1,0 +1,72 @@
+# GERADO pela skill emdash-cicd (scripts/install-workflows.sh) — não editar aqui.
+# Fonte: __SKILL__/templates/workflows/deploy.yml
+#
+# Deploy do site. Disparo manual. Duas ações, as duas pela skill:
+#   status — `pipeline.sh status`: só leitura. Mostra a conta, o banco e o fingerprint do alvo.
+#   deploy — `pipeline.sh deploy`: os MESMOS checks do CI e, se passarem,
+#            backup → migrate → deploy → check → verificação → run record.
+#
+# Configuração do repositório (uma vez): __SKILL__/references/primeiro-deploy.md
+#   secret   CLOUDFLARE_API_TOKEN
+#   variable CLOUDFLARE_ACCOUNT_ID
+#   variable EMDASH_TARGET_FINGERPRINT   (ou o campo "fingerprint" ao disparar)
+#   variable EMDASH_DEPLOY_URL           (opcional)
+#   secret   EMDASH_ENCRYPTION_KEY       (opcional no primeiro deploy)
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: "status = só inspeciona o alvo · deploy = pipeline completo"
+        type: choice
+        options: [status, deploy]
+        default: status
+      fingerprint:
+        description: "deploy: fingerprint conferido na ação status (vazio = usa a variável EMDASH_TARGET_FINGERPRINT)"
+        type: string
+        required: false
+
+# Uma migration por vez para esta conta + banco; a segunda espera na fila
+# (doc EmDash: deployment/core-migrations.mdx).
+concurrency:
+  group: emdash-migrations-${{ vars.CLOUDFLARE_ACCOUNT_ID }}-__WORKER__
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    name: pipeline.sh ${{ inputs.acao }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      EMDASH_TARGET_FINGERPRINT: ${{ inputs.fingerprint || vars.EMDASH_TARGET_FINGERPRINT }}
+      EMDASH_DEPLOY_URL: ${{ vars.EMDASH_DEPLOY_URL }}
+      EMDASH_CICD_ENCRYPTION_KEY: ${{ secrets.EMDASH_ENCRYPTION_KEY }}
+      EMDASH_CICD_EVIDENCE_DIR: ${{ runner.temp }}/evidencias
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: mkdir -p "$EMDASH_CICD_EVIDENCE_DIR"
+      - run: __SKILL__/scripts/pipeline.sh ${{ inputs.acao }}
+
+      # O bookmark do Time Travel é o ponto de retorno do banco: guardar fora do runner.
+      - name: Guardar evidências (backup point, logs, run record)
+        if: always() && inputs.acao == 'deploy'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-${{ github.run_id }}
+          path: |
+            backups/
+            ${{ runner.temp }}/evidencias/
+            __SKILL__/runs/
+          if-no-files-found: ignore
+          retention-days: 90

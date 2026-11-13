@@ -60,9 +60,41 @@ else
   fi
 fi
 
-# doctor: valida scheduler wiring (Cron Trigger + handler scheduled nos arquivos locais)
+# doctor: valida scheduler wiring (Cron Trigger + handler scheduled nos arquivos locais).
+# Num projeto D1 o check "database" do doctor SEMPRE falha: ele procura um SQLite local
+# (./data.db) que não existe — a doc upstream (deployment/cloudflare.mdx, "Scheduled
+# publishing") diz que essa falha não afeta os checks de scheduler. Por isso o gate lê
+# `doctor --json` e, em projeto D1, desconsidera só a falha "database"; todo o resto vale.
+doctor_gate() {
+  local out
+  out=$(npx emdash doctor --json 2>/dev/null) || true
+  DOCTOR_JSON="$out" node -e '
+    const fs = require("fs");
+    let results;
+    try { results = JSON.parse(process.env.DOCTOR_JSON); }
+    catch { console.log("doctor não devolveu JSON legível"); process.exit(1); }
+    if (!Array.isArray(results)) { console.log("formato inesperado do doctor --json"); process.exit(1); }
+    let isD1 = false;
+    try {
+      const w = fs.readFileSync("wrangler.jsonc", "utf8").replace(/^\s*\/\/.*$/gm, "");
+      isD1 = /"d1_databases"/.test(w);
+    } catch {}
+    let failed = 0;
+    for (const r of results) {
+      const ignored = isD1 && r.status === "fail" && r.name === "database";
+      const tag = ignored ? "N/A " : r.status === "pass" ? "PASS" : r.status === "warn" ? "WARN" : "FAIL";
+      console.log(`  ${tag}  ${r.name}: ${r.message ?? ""}${ignored ? " (projeto D1: sem SQLite local — esperado)" : ""}`);
+      if (r.status === "fail" && !ignored) failed++;
+    }
+    if (isD1 && !results.some((r) => r.name === "scheduler wiring" && r.status === "pass")) {
+      console.log("  FAIL  scheduler wiring não confirmado (Cron Trigger + handler scheduled)");
+      failed++;
+    }
+    process.exit(failed ? 1 : 0);
+  '
+}
 if [ -x node_modules/.bin/emdash ] || command -v emdash >/dev/null 2>&1; then
-  run_gate "emdash doctor" npx emdash doctor
+  run_gate "emdash doctor" doctor_gate
 else
   echo "SKIP  emdash doctor (CLI não instalada)"
 fi

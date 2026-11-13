@@ -27,8 +27,10 @@ command -v jq >/dev/null 2>&1 && pass "jq" || warn "jq ausente (necessário para
 command -v git >/dev/null 2>&1 && pass "git" || fail "git ausente"
 
 # Auth Cloudflare: token explícito (CI) OU login interativo
-if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-  pass "CLOUDFLARE_API_TOKEN/ACCOUNT_ID definidos (modo CI)"
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+  pass "CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID definidos (modo CI)"
+elif [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+  warn "só um de CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID definido — emdash migrate exige os dois (ou account_id no wrangler.jsonc)"
 elif command -v wrangler >/dev/null 2>&1 && wrangler whoami >/dev/null 2>&1; then
   pass "wrangler autenticado (login interativo)"
 else
@@ -62,6 +64,14 @@ echo "$WRANGLER_CLEAN" | grep -qE '"binding":\s*"LOADER"' \
 echo "$WRANGLER_CLEAN" | grep -q '"exports"' && echo "$WRANGLER_CLEAN" | grep -q '"migrations"' \
   && fail "exports e migrations no mesmo wrangler.jsonc são incompatíveis (docs upstream)" \
   || pass "exports/migrations não conflitam"
+
+# --- Evidências do pipeline fora do versionamento do site ---
+# backup-point.sh grava backups/<ts>/ e deploy.sh cria um lock no projeto. O deploy já
+# os desconsidera na checagem de árvore limpa; aqui só se avisa para não commitá-los.
+for P in "backups" ".emdash-cicd-deploy.lock"; do
+  if git check-ignore -q "$P" 2>/dev/null; then pass "$P ignorado pelo git"
+  else warn "$P não está no .gitignore — adicionar (evidência local de deploy, não é código do site)"; fi
+done
 
 # --- Secrets ---
 [ -f .env ] && grep -q "EMDASH_ENCRYPTION_KEY" .env \

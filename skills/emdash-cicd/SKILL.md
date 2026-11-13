@@ -1,7 +1,7 @@
 ---
 name: emdash-cicd
 description: Orquestrar o pipeline de desenvolvimento, integração e deploy de um site EmDash em Cloudflare Workers, executando os gates de qualidade como código (preflight, gates locais, ponto de backup, deploy com migrations, verificação pós-deploy e retrospectiva). Baseia-se nas skills oficiais do repositório EmDash (building-emdash-site, emdash-cli, adversarial-reviewer, agent-browser, ux-acceptance-coordinator, upgrading-emdash) e as orquestra sem substituí-las. É uma SKILL VIVA: todo procedimento novo descoberto numa execução deve ser incorporado a ela via protocolo de atualização da seção "Skill Viva".
-version: 1.1.0
+version: 1.2.0
 living-skill: true
 update-protocol: CHANGELOG-required
 upstream-base: emdash-cms/emdash (skills/ e .agents/skills/)
@@ -50,7 +50,7 @@ DEV ──▶ REVIEW ──▶ INTEGRATION ──▶ BACKUP ──▶ DEPLOY ─
 ```
 
 ### Estágio 1 — DEV (`scripts/gate-local.sh`)
-Roda os gates de qualidade que o projeto define (detecção automática via package.json): `typecheck` (sempre disponível — `astro check`), e quando a toolchain completa existir (monorepo upstream ou projeto da empresa com oxlint/oxfmt/vitest): `format:check`, `lint`, `test:unit`, `test:browser`, `test:e2e` (opcional via `EMDASH_CICD_E2E=1`), mais `emdash doctor` (scheduler wiring). Gates ausentes são reportados como SKIP, não como falha. Nenhum commit de feature passa com gate vermelho.
+Roda os gates de qualidade que o projeto define (detecção automática via package.json): `typecheck` (sempre disponível — `astro check`), e quando a toolchain completa existir (monorepo upstream ou projeto da empresa com oxlint/oxfmt/vitest): `format:check`, `lint`, `test:unit`, `test:browser`, `test:e2e` (opcional via `EMDASH_CICD_E2E=1`), mais `emdash doctor`. Num projeto D1 o check `database` do doctor sempre falha (ele procura um SQLite local) — o gate lê `doctor --json`, desconsidera só essa falha e exige `scheduler wiring` passando. Gates ausentes são reportados como SKIP, não como falha. Nenhum commit de feature passa com gate vermelho.
 
 ### Estágio 2 — REVIEW (`adversarial-reviewer` upstream)
 Executar a skill upstream sobre o diff. Findings Critical/High bloqueiam; Medium/Low viram issues. O padrão de findings (invariante violado, local, gatilho, consequência, correção) é o da upstream.
@@ -62,10 +62,10 @@ Executar a skill upstream sobre o diff. Findings Critical/High bloqueiam; Medium
 Ponto de recuperação ANTES de qualquer migration: bookmark Time Travel do D1 + sync R2 opcional + hash do artefato. Sem bookmark registrado, o deploy não prossegue.
 
 ### Estágio 5 — DEPLOY (`scripts/deploy.sh`)
-Sequência oficial (core-migrations.mdx upstream), serializada por lock: build → `emdash migrate --status` → migrate (fingerprint em modo não-interativo) → `wrangler deploy` do MESMO artefato → `emdash migrate --check`. Guarda de árvore limpa e de segredo `EMDASH_ENCRYPTION_KEY`.
+Sequência oficial (core-migrations.mdx upstream), serializada por lock: build → `emdash migrate --status` → migrate (fingerprint em modo não-interativo) → `wrangler deploy` do MESMO artefato → `emdash migrate --check`. Guarda de árvore limpa (as evidências do próprio pipeline — `backups/` e o lock — não contam). Sem terminal interativo, exige `EMDASH_TARGET_FINGERPRINT` logo no início; registros de migration desconhecidos abortam antes de aplicar.
 
 ### Estágio 6 — VERIFY (`scripts/postdeploy.sh`)
-Health do URL público, `/_emdash/admin/` respondendo, `migrate --check` final, verificação de bindings (via `.wrangler/deploy/config.json`).
+Exige a URL real (`--url` ou `EMDASH_DEPLOY_URL` — nunca inferida: o endereço `workers.dev` inclui o subdomínio da conta). Health do URL público, `/_emdash/admin/` respondendo, `migrate --check` final, verificação de bindings (via `.wrangler/deploy/config.json`).
 
 ### Estágio 7 — RETRO (`scripts/retro.sh`)
 Toda execução termina com um run record em `runs/`. Se surgiram procedimentos novos, comandos manuais não previstos, erros não cobertos pelos gates ou decisões ad-hoc, isto É um gap: aplicar o Protocolo Skill Viva abaixo ANTES de encerrar a tarefa.
@@ -97,7 +97,7 @@ scripts/preflight.sh                  # ambiente + projeto + bindings prontos?
 scripts/gate-local.sh                 # todos os gates locais (espelham ci.yml)
 scripts/backup-point.sh               # bookmark Time Travel + evidências
 scripts/deploy.sh                     # build → migrate → deploy → check (serializado)
-scripts/postdeploy.sh                 # health + admin + migrate --check
+scripts/postdeploy.sh --url <url>     # health + admin + migrate --check
 scripts/retro.sh                      # run record + validação skill viva
 ```
 

@@ -23,9 +23,18 @@ LOCK=".emdash-cicd-deploy.lock"
 fail() { echo "DEPLOY FAIL: $1"; exit "${2:-1}"; }
 
 # --- Gate 0: árvore limpa (deploy reproduzível) ---
-[ -n "$(git status --porcelain 2>/dev/null)" ] \
+# backups/ e o lock são evidências geradas pelo próprio pipeline (não são código do site):
+# ficam fora da checagem, senão o primeiro deploy bloquearia todos os seguintes.
+[ -n "$(git status --porcelain -- . ':(exclude)backups' ':(exclude).emdash-cicd-deploy.lock' 2>/dev/null)" ] \
   && fail "árvore git suja — commitar/stash antes do deploy (deploy reproduzível)" 1
 echo "PASS  árvore git limpa"
+
+# --- Gate 0b: sem terminal não há confirmação interativa do alvo ---
+# `emdash migrate` não-interativo exige --expected-target-fingerprint (CLI upstream, exit 4).
+# Falhar aqui, antes do backup e do build, em vez de descobrir no meio do deploy.
+if [ -z "${EMDASH_TARGET_FINGERPRINT:-}" ] && [ ! -t 0 ]; then
+  fail "sem terminal interativo e sem EMDASH_TARGET_FINGERPRINT — revisar o alvo com 'emdash migrate --status' e exportar o fingerprint impresso" 4
+fi
 
 # --- Gate 1: lock de concorrência (migrations não rodam em paralelo) ---
 if [ -f "$LOCK" ]; then
@@ -55,10 +64,15 @@ STATUS=$($PNPM emdash migrate --status --wrangler-config wrangler.jsonc --json 2
   || STATUS=$($PNPM emdash migrate --status --wrangler-config wrangler.jsonc) \
   || fail "migrate --status falhou — verificar CLOUDFLARE_ACCOUNT_ID/API_TOKEN e database_id" 1
 echo "$STATUS"
-PENDING=$(echo "$STATUS" | jq -r '.pending // .summary.pending // empty' 2>/dev/null | head -1 || true)
-[ -n "$PENDING" ] && [ "$PENDING" != "0" ] && [ "$PENDING" != "[]" ] \
-  && echo "INFO  migrations pendentes: $PENDING" \
-  || echo "INFO  nenhuma migration pendente (deploy de código puro)"
+# O relatório JSON estável do CLI traz `pending` e `unknownApplied` como listas de nomes.
+PENDING=$(echo "$STATUS" | jq -r '(.pending // []) | length' 2>/dev/null || true)
+UNKNOWN=$(echo "$STATUS" | jq -r '(.unknownApplied // []) | length' 2>/dev/null || true)
+if [ -n "$UNKNOWN" ] && [ "$UNKNOWN" != "0" ]; then
+  fail "o banco tem $UNKNOWN registro(s) de migration desconhecido(s) para este build — NÃO aplicar: confirmar a versão do artefato (doc upstream: core-migrations, Troubleshooting)" 4
+fi
+if [ -n "$PENDING" ] && [ "$PENDING" != "0" ]; then echo "INFO  migrations pendentes: $PENDING"
+elif [ -n "$PENDING" ]; then echo "INFO  nenhuma migration pendente (deploy de código puro)"
+else echo "INFO  relatório não-JSON — conferir pendências na saída acima"; fi
 
 # --- Gate 5: aplicar migrations ---
 echo "== migrate =="
@@ -88,5 +102,5 @@ echo "PASS  schema verificado"
 
 URL=$(npx wrangler deployments list 2>/dev/null | grep -oE 'https://[a-z0-9.-]+\.workers\.dev' | head -1 || true)
 echo
-echo "DEPLOY OK — artefato: $(git rev-parse --short HEAD 2>/dev/null || 'n/a')${URL:+ — URL: $URL}"
-echo "Próximo: scripts/postdeploy.sh (health + admin + bindings) e scripts/retro.sh (run record)."
+echo "DEPLOY OK — artefato: $(git rev-parse --short HEAD 2>/dev/null || echo n/a)${URL:+ — URL: $URL}"
+echo "Próximo: scripts/postdeploy.sh --url <url pública> (health + admin + bindings) e scripts/retro.sh (run record)."

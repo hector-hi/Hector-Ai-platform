@@ -2,6 +2,30 @@
 
 Toda mudança nesta skill exige: (1) edição em SKILL.md/scripts/references, (2) bump de `version` no frontmatter do SKILL.md, (3) entrada aqui, na mesma mudança. Format: `Keep a Changelog`, semântica simples MAJOR.MINOR.PATCH (procedimento novo = MINOR, ajuste = PATCH, quebra de contrato de script = MAJOR).
 
+## [1.2.0] — 2026-11-13
+
+Revisão da skill contra o código-fonte do EmDash (CLI `migrate`/`doctor`, `reference/cli.mdx`, `deployment/cloudflare.mdx`, `deployment/core-migrations.mdx`). Nenhuma destas correções veio de um deploy real — vieram de leitura do código e de testes dos scripts contra um projeto-stub; o primeiro run real ainda vai validá-las.
+
+### Fixed
+- `scripts/gate-local.sh`: o gate `emdash doctor` falhava em **todo** projeto D1, porque o check `database` do doctor procura um SQLite local (`./data.db`) e o comando sai com 1. A doc upstream registra que essa falha não afeta os checks de scheduler. O gate agora lê `doctor --json`, desconsidera só a falha `database` quando o `wrangler.jsonc` declara `d1_databases`, e exige `scheduler wiring` passando.
+- `scripts/deploy.sh`: a checagem de árvore limpa bloqueava o segundo deploy, porque o `backup-point.sh` grava `backups/<ts>/` dentro do projeto. `backups/` e o lock ficam fora da checagem.
+- `scripts/deploy.sh`: `pending` do relatório JSON é uma lista de nomes, não um número — a leitura imprimia `[`. Agora conta os itens.
+- `scripts/deploy.sh`: mensagem final executava `'n/a'` como comando quando não havia git.
+- `scripts/postdeploy.sh`: a URL era inferida como `https://<worker>.workers.dev`, endereço que não existe (falta o subdomínio da conta). Agora `--url`/`EMDASH_DEPLOY_URL` é obrigatória (exit 2).
+- `scripts/postdeploy.sh`: o check de cron lia o `wrangler.jsonc` com comentários; um cron comentado passava.
+- `scripts/preflight.sh`: a autenticação "modo CI" passava com só uma das duas variáveis; `emdash migrate` exige as duas.
+
+### Added
+- `scripts/deploy.sh`: sem terminal interativo e sem `EMDASH_TARGET_FINGERPRINT`, falha (exit 4) **antes** do backup e do build — antes só falharia no meio do deploy.
+- `scripts/deploy.sh`: registros de migration desconhecidos (`unknownApplied`) abortam antes de qualquer apply.
+- `scripts/postdeploy.sh`: distingue os exit codes 2 (pendentes) e 3 (desconhecidos) do `emdash migrate --check`.
+- `scripts/preflight.sh`: avisa se `backups/` e o lock não estão no `.gitignore` do site.
+- `references/pipeline-detail.md`: tabela de tradução entre os exit codes do CLI upstream e os da skill.
+
+### Lacunas conhecidas (ainda não incorporadas — dependem de decisão)
+- Ambientes nomeados do Wrangler (`--wrangler-env` / `--env` / `CLOUDFLARE_ENV` no build) não são suportados pelos scripts; entram junto com a decisão D10 (staging).
+- Não existe workflow do GitHub Actions na skill; o oficial está em `core-migrations.mdx` e entra quando o site existir no repositório.
+
 ## [1.1.0] — 2026-11-13
 
 ### Changed

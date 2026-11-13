@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # postdeploy.sh — verificação pós-deploy: health, admin, schema e bindings.
 # Uso: scripts/postdeploy.sh [--project <dir>] [--url <url>]
-# Exit codes: 0 = saudável; 1 = verificação falhou; 5 = site fora do ar.
+# Exit codes: 0 = saudável; 1 = verificação falhou; 2 = uso (URL ausente); 5 = site fora do ar.
 set -uo pipefail
 
 PROJECT="."
@@ -20,16 +20,10 @@ FAILED=0
 pass() { echo "PASS  $1"; }
 fail() { echo "FAIL  $1"; FAILED=1; }
 
-# URL alvo: argumento > env > workers.dev inferido do nome do Worker
-if [ -z "$URL" ]; then
-  WNAME=$(node -e '
-    const fs=require("fs");
-    const t=fs.readFileSync("wrangler.jsonc","utf8").replace(/\/\/.*$/gm,"");
-    const m=t.match(/"name":\s*"([^"]+)"/); console.log(m?m[1]:"");
-  ' 2>/dev/null || true)
-  [ -n "$WNAME" ] && URL="https://${WNAME}.workers.dev"
-fi
-[ -z "$URL" ] && { echo "FAIL: nenhuma URL (use --url ou EMDASH_DEPLOY_URL)"; exit 1; }
+# URL alvo: argumento > env. NÃO se infere: o endereço workers.dev real é
+# <worker>.<subdomínio-da-conta>.workers.dev — o nome do Worker sozinho não basta, e
+# verificar o host errado daria um resultado que não diz nada sobre o deploy.
+[ -z "$URL" ] && { echo "FAIL: nenhuma URL — usar --url <url> ou EMDASH_DEPLOY_URL (a URL que o 'wrangler deploy' imprimiu, ou o domínio próprio)"; exit 2; }
 
 echo "== Post-deploy verify: ${URL} =="
 
@@ -49,11 +43,14 @@ case "$ACODE" in
 esac
 
 # 3. Schema verificado (mesmo artefato)
-if $PNPM emdash migrate --check --wrangler-config wrangler.jsonc >/dev/null 2>&1; then
-  pass "emdash migrate --check (schema em dia)"
-else
-  fail "migrate --check divergente — migrations pendentes/desconhecidas no banco"
-fi
+# Exit codes do CLI upstream (reference/cli.mdx): 2 = pendentes, 3 = registros desconhecidos.
+$PNPM emdash migrate --check --wrangler-config wrangler.jsonc >/dev/null 2>&1; MC=$?
+case "$MC" in
+  0) pass "emdash migrate --check (schema em dia)" ;;
+  2) fail "migrate --check: migrations conhecidas PENDENTES no banco" ;;
+  3) fail "migrate --check: registros de migration DESCONHECIDOS — banco mais novo ou histórico divergente; não reaplicar" ;;
+  *) fail "migrate --check não pôde ser executado (exit $MC) — credenciais, manifest ou alvo" ;;
+esac
 
 # 4. Bindings efetivos do deploy (lê o config GERADO, não o wrangler.jsonc)
 CFG="dist/server/wrangler.json"
@@ -68,7 +65,7 @@ else
 fi
 
 # 5. Cron ativo (tail de 2 min é manual; aqui só valida a config local)
-grep -qE '"crons":\s*\["\* \* \* \* \*"\]' wrangler.jsonc \
+sed 's|^[[:space:]]*//.*$||' wrangler.jsonc | grep -qE '"crons":\s*\["\* \* \* \* \*"\]' \
   && pass "cron local configurado (Cloudflare pode levar até 15 min para ativar novo/alterado trigger)" \
   || fail "cron ausente na config local"
 

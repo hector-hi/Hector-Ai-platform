@@ -24,6 +24,12 @@
 	"exports": {
 		"EmDashRoom": { "type": "durable-object", "storage": "sqlite" },
 	},
+	// Endereço público definitivo. Definido ANTES do setup para que as passkeys nasçam
+	// presas a este domínio, e não ao workers.dev (doc EmDash: deployment/cloudflare.mdx,
+	// "Custom domains"). Fica em vars, não em siteUrl, para não quebrar previews.
+	"vars": {
+		"EMDASH_SITE_URL": "https://hector-ai.space",
+	},
 	// Sandboxed plugins require Worker Loader, available on Workers paid plans.
 	"worker_loaders": [{ "binding": "LOADER" }],
 	// General maintenance cron trigger

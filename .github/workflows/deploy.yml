@@ -1,0 +1,140 @@
+# Deploy do site pela skill emdash-cicd. Disparo manual, sempre.
+#
+# Duas ações:
+#   status — só constrói e inspeciona o alvo de migration. Não muda nada.
+#            Mostra o fingerprint do alvo, que você confere e grava na variável
+#            EMDASH_TARGET_FINGERPRINT.
+#   deploy — pipeline completo: preflight → gates → backup → build → migrate →
+#            deploy → check → verificação pós-deploy → run record.
+#
+# Configurar no GitHub (Settings → Secrets and variables → Actions):
+#   secret   CLOUDFLARE_API_TOKEN        token com Workers Scripts Edit, D1 Edit,
+#                                        Workers R2 Storage Edit, Workers KV Storage Edit
+#   variable CLOUDFLARE_ACCOUNT_ID       ID da conta Cloudflare
+#   variable EMDASH_TARGET_FINGERPRINT   impresso pela ação "status", depois de conferido
+#   variable EMDASH_DEPLOY_URL           (opcional) URL pública; sem ela, usa a que o deploy imprimir
+#   secret   EMDASH_ENCRYPTION_KEY       (opcional) enviada ao Worker como secret após o deploy
+#
+# A ordem build → migrate → deploy → check e a serialização seguem
+# docs/src/content/docs/deployment/core-migrations.mdx do EmDash.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: "status = só inspeciona o alvo · deploy = pipeline completo"
+        type: choice
+        options: [status, deploy]
+        default: status
+
+# Uma migration por vez para esta conta + banco; a segunda espera na fila.
+concurrency:
+  group: emdash-migrations-${{ vars.CLOUDFLARE_ACCOUNT_ID }}-hector-ai-platform
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+jobs:
+  pipeline:
+    name: ${{ inputs.acao }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Credenciais presentes
+        run: |
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::variável CLOUDFLARE_ACCOUNT_ID não definida"; exit 1; }
+          [ -n "$CLOUDFLARE_API_TOKEN" ]  || { echo "::error::secret CLOUDFLARE_API_TOKEN não definido"; exit 1; }
+
+      - name: Preflight
+        run: skills/emdash-cicd/scripts/preflight.sh
+
+      # ---------- ação: status ----------
+      - name: Build
+        if: inputs.acao == 'status'
+        run: pnpm build
+
+      - name: Inspecionar o alvo de migration (não muda nada)
+        if: inputs.acao == 'status'
+        run: |
+          set -o pipefail
+          pnpm emdash migrate --status --wrangler-config wrangler.jsonc | tee "$RUNNER_TEMP/status.txt"
+          {
+            echo "## Alvo de migration"
+            echo '```'
+            cat "$RUNNER_TEMP/status.txt"
+            echo '```'
+            echo "Confira conta e banco acima. Se forem os certos, grave o valor de"
+            echo "**Target fingerprint** na variável \`EMDASH_TARGET_FINGERPRINT\` e rode a ação **deploy**."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------- ação: deploy ----------
+      - name: Gates locais
+        if: inputs.acao == 'deploy'
+        run: |
+          pnpm build
+          skills/emdash-cicd/scripts/gate-local.sh
+          git status --porcelain
+
+      - name: Deploy (backup → build → migrate → deploy → check)
+        if: inputs.acao == 'deploy'
+        env:
+          EMDASH_TARGET_FINGERPRINT: ${{ vars.EMDASH_TARGET_FINGERPRINT }}
+        # O log vai para fora do checkout: deploy.sh exige árvore git limpa.
+        run: |
+          set -o pipefail
+          skills/emdash-cicd/scripts/deploy.sh 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+
+      - name: Secret EMDASH_ENCRYPTION_KEY no Worker
+        if: inputs.acao == 'deploy'
+        env:
+          EMDASH_ENCRYPTION_KEY: ${{ secrets.EMDASH_ENCRYPTION_KEY }}
+        run: |
+          if [ -n "$EMDASH_ENCRYPTION_KEY" ]; then
+            printf '%s' "$EMDASH_ENCRYPTION_KEY" | pnpm wrangler secret put EMDASH_ENCRYPTION_KEY
+          else
+            echo "::warning::secret EMDASH_ENCRYPTION_KEY não definido no GitHub — settings secretos de plugins ficam indisponíveis até ele existir no Worker"
+          fi
+
+      - name: Verificação pós-deploy
+        if: inputs.acao == 'deploy'
+        env:
+          EMDASH_DEPLOY_URL: ${{ vars.EMDASH_DEPLOY_URL }}
+        run: |
+          URL="$EMDASH_DEPLOY_URL"
+          [ -n "$URL" ] || URL=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
+          [ -n "$URL" ] || { echo "::error::sem URL: defina a variável EMDASH_DEPLOY_URL"; exit 2; }
+          echo "URL verificada: $URL" >> "$GITHUB_STEP_SUMMARY"
+          skills/emdash-cicd/scripts/postdeploy.sh --url "$URL"
+
+      - name: Run record
+        if: always() && inputs.acao == 'deploy'
+        run: |
+          skills/emdash-cicd/scripts/retro.sh \
+            --stages "preflight,gates,backup,deploy,verify (GitHub Actions run ${{ github.run_id }})" \
+            --note "resultado do job: ${{ job.status }}"
+
+      # O bookmark do Time Travel é o ponto de retorno do banco: guardar fora do runner.
+      - name: Guardar evidências (backup point, log, run record)
+        if: always() && inputs.acao == 'deploy'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-${{ github.run_id }}
+          path: |
+            backups/
+            ${{ runner.temp }}/deploy.log
+            skills/emdash-cicd/runs/
+          include-hidden-files: false
+          retention-days: 90

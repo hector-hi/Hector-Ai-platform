@@ -2,7 +2,7 @@
 
 O roteiro, na ordem. O porquê de cada escolha está em [`01-arquitetura.md`](01-arquitetura.md); aqui ficam os passos.
 
-**Nenhum deploy foi executado ainda.** Este é o plano de execução, conferido contra o código — não um relato.
+**Estado em 13/11/2026:** a Fase 1 foi executada até o passo 1.3 (site criado, banco e bucket provisionados, gates verdes). O passo 1.4 em diante — o deploy — ainda não rodou. As fases 3 a 5 são plano, não relato.
 
 ## Visão geral
 
@@ -60,7 +60,9 @@ O projeto criado já traz as skills `building-emdash-site`, `creating-plugins` e
 
 > O scaffolder gera uma `EMDASH_ENCRYPTION_KEY` no `.env`. O `.gitignore` do template já exclui o `.env`. **Não commitar.** **[v1]**
 
-Alternativa equivalente: copiar `templates/starter-cloudflare` do repositório do EmDash e trocar as dependências `workspace:*` e `catalog:` pelas versões publicadas.
+Alternativa equivalente: copiar `templates/starter-cloudflare` do repositório do EmDash e trocar as dependências `workspace:*` e `catalog:` pelas versões publicadas. **Foi o caminho usado aqui** (decisão A13): o scaffolder baixa o template de `github.com/emdash-cms/templates`, e o ambiente em que o site foi criado não alcançava esse repositório.
+
+Atenção a um detalhe do scaffolder: `--sandboxed-plugins` descomenta `worker_loaders` no `wrangler.jsonc`, mas não acrescenta `sandboxRunner: sandbox()` ao `astro.config.mjs`, que a doc do sandbox pede. Conferir os dois (Fase 2). **[código: `packages/create-emdash/src/utils.ts`]**
 
 ### 1.2 Provisionar o banco
 
@@ -291,9 +293,24 @@ Só nomes nos arquivos. Valores em secret do Worker, secret do GitHub ou gerenci
 
 ## O deploy no GitHub Actions
 
-O workflow oficial **[doc: `deployment/core-migrations.mdx`]**. Ele ainda não está neste repositório — entra junto com o site.
+Este repositório tem dois workflows, e os dois chamam os scripts da skill:
 
-No GitHub: secret `CLOUDFLARE_API_TOKEN`; variáveis `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID`, `EMDASH_TARGET_FINGERPRINT`.
+- [`ci.yml`](../.github/workflows/ci.yml) — em todo push: preflight, build, gates, ensaio de deploy.
+- [`deploy.yml`](../.github/workflows/deploy.yml) — manual, com duas ações: `status` (só inspeciona o alvo e mostra o fingerprint) e `deploy` (pipeline completo, com backup antes da migration).
+
+**Para o primeiro deploy**, no GitHub, em *Settings → Secrets and variables → Actions*:
+
+| Tipo | Nome | Valor |
+|---|---|---|
+| Secret | `CLOUDFLARE_API_TOKEN` | Token com Workers Scripts Edit, D1 Edit, Workers R2 Storage Edit, Workers KV Storage Edit |
+| Variável | `CLOUDFLARE_ACCOUNT_ID` | ID da conta |
+| Variável | `EMDASH_TARGET_FINGERPRINT` | O que a ação `status` imprimir, **depois de você conferir conta e banco** |
+| Variável | `EMDASH_DEPLOY_URL` | Opcional. Sem ela, o pós-deploy verifica a URL `workers.dev` que o deploy imprimir |
+| Secret | `EMDASH_ENCRYPTION_KEY` | Opcional no primeiro deploy |
+
+Depois: *Actions → Deploy → Run workflow* → `status`; conferir; gravar o fingerprint; `deploy`.
+
+Para referência, o workflow oficial do EmDash, do qual o nosso deriva **[doc: `deployment/core-migrations.mdx`]** — ele usa as variáveis `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID` e `EMDASH_TARGET_FINGERPRINT`:
 
 ```yaml
 name: Deploy
@@ -347,7 +364,7 @@ Dois cuidados:
 - O `wrangler deploy` do workflow também precisa do token no ambiente. O exemplo upstream não o mostra nesse passo; ao adotar, conferir. **[nosso — observação de leitura, não testada]**
 - **Atualizar `EMDASH_TARGET_FINGERPRINT` só depois de conferir o alvo localmente.** O fingerprint não é segredo, mas trocá-lo sem olhar remove a proteção contra migrar o banco errado.
 
-Este workflow não inclui o bookmark do Time Travel. O `deploy.sh` da skill inclui. Ao montar o workflow do repositório, o passo de backup entra antes do apply.
+O workflow oficial não inclui o bookmark do Time Travel. O nosso inclui, porque roda o `deploy.sh` da skill, e guarda o bookmark como artefato do job por 90 dias.
 
 ---
 

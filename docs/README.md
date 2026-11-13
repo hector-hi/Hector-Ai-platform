@@ -1,6 +1,6 @@
 # Documentação — índice e convenções
 
-**Versão da série:** 2.0.0 · **Data:** 13/11/2026 · Histórico em [`CHANGELOG.md`](CHANGELOG.md)
+**Versão da série:** 2.1.0 · **Data:** 13/11/2026 · Histórico em [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Ordem de leitura
 

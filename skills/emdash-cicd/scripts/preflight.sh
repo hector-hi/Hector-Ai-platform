@@ -13,16 +13,18 @@ fail() { echo "FAIL  $1"; FAILED=$((FAILED+1)); }
 warn() { echo "WARN  $1"; }
 FAILED=0
 
+PROJECT_BIN="node_modules/.bin"
 echo "== EmDash CI/CD preflight =="
 
 # --- Ambiente ---
 command -v node >/dev/null 2>&1 && NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]') \
-  && [ "$NODE_MAJOR" -ge 22 ] && pass "Node.js >= 22 (v$(node --version))" \
+  && [ "$NODE_MAJOR" -ge 22 ] && pass "Node.js >= 22 ($(node --version))" \
   || fail "Node.js >= 22 necessário (docs upstream: 22.23.4+)"
 command -v pnpm >/dev/null 2>&1 && pass "pnpm $(pnpm --version)" \
   || warn "pnpm não no PATH (usar npx pnpm ou corepack enable)"
-command -v wrangler >/dev/null 2>&1 && pass "wrangler CLI" \
-  || warn "wrangler não no PATH (npx wrangler)"
+if command -v wrangler >/dev/null 2>&1; then pass "wrangler CLI (global)"
+elif [ -x "$PROJECT_BIN/wrangler" ]; then pass "wrangler CLI (do projeto — usar 'pnpm wrangler')"
+else warn "wrangler ausente (nem global, nem em node_modules — rodar pnpm install)"; fi
 command -v jq >/dev/null 2>&1 && pass "jq" || warn "jq ausente (necessário para backup/deploy)"
 command -v git >/dev/null 2>&1 && pass "git" || fail "git ausente"
 
@@ -68,15 +70,21 @@ echo "$WRANGLER_CLEAN" | grep -q '"exports"' && echo "$WRANGLER_CLEAN" | grep -q
 # --- Evidências do pipeline fora do versionamento do site ---
 # backup-point.sh grava backups/<ts>/ e deploy.sh cria um lock no projeto. O deploy já
 # os desconsidera na checagem de árvore limpa; aqui só se avisa para não commitá-los.
-for P in "backups" ".emdash-cicd-deploy.lock"; do
-  if git check-ignore -q "$P" 2>/dev/null; then pass "$P ignorado pelo git"
-  else warn "$P não está no .gitignore — adicionar (evidência local de deploy, não é código do site)"; fi
+# (testa um caminho DENTRO de backups/: o padrão "backups/" só casa com diretório, e o
+# diretório ainda não existe antes do primeiro deploy)
+for P in "backups/x" ".emdash-cicd-deploy.lock"; do
+  if git check-ignore -q "$P" 2>/dev/null; then pass "${P%/x} ignorado pelo git"
+  else warn "${P%/x} não está no .gitignore — adicionar (evidência local de deploy, não é código do site)"; fi
 done
 
 # --- Secrets ---
-[ -f .env ] && grep -q "EMDASH_ENCRYPTION_KEY" .env \
-  && pass "EMDASH_ENCRYPTION_KEY no .env (não commitar)" \
-  || warn "EMDASH_ENCRYPTION_KEY ausente no .env (necessária p/ plugin settings encriptados)"
+if [ -f .env ] && grep -q "EMDASH_ENCRYPTION_KEY" .env; then
+  pass "EMDASH_ENCRYPTION_KEY no .env (não commitar)"
+elif [ -n "${CI:-}" ]; then
+  echo "INFO  EMDASH_ENCRYPTION_KEY: em CI não há .env — a chave de produção é secret do Worker (wrangler secret put)"
+else
+  warn "EMDASH_ENCRYPTION_KEY ausente no .env (necessária p/ plugin settings encriptados)"
+fi
 
 echo
 if [ "$FAILED" -gt 0 ]; then

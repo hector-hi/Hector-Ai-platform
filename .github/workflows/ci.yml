@@ -1,0 +1,50 @@
+# Gates de qualidade em todo push e pull request.
+# Executa os mesmos scripts da skill emdash-cicd que se rodam localmente —
+# o workflow não tem regra própria: a regra está em skills/emdash-cicd/scripts/.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: Gates (skill emdash-cicd)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Scripts da skill — sintaxe
+        run: for f in skills/emdash-cicd/scripts/*.sh; do bash -n "$f"; done
+
+      - name: Preflight
+        run: skills/emdash-cicd/scripts/preflight.sh
+
+      - name: Build
+        run: pnpm build
+
+      - name: Gates locais (typecheck + emdash doctor)
+        run: skills/emdash-cicd/scripts/gate-local.sh
+
+      - name: Ensaio de deploy (não publica nada)
+        run: pnpm wrangler deploy --dry-run
+
+      - name: Skill viva — versão consta no CHANGELOG
+        run: |
+          V=$(awk -F': *' '/^version:/ {print $2; exit}' skills/emdash-cicd/SKILL.md)
+          head -40 skills/emdash-cicd/CHANGELOG.md | grep -q "\[$V\]" \
+            || { echo "version $V do SKILL.md não consta no CHANGELOG.md"; exit 6; }
+          echo "skill emdash-cicd v$V documentada"

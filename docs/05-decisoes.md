@@ -8,15 +8,14 @@ Quem decide é o Hector. Uma decisão registrada aqui não se reabre sem fato no
 
 ```mermaid
 flowchart LR
-  subgraph agora["Bloqueiam a Fase 1"]
-    N["Nomes"]
-    D1["D1 · domínio"]
-    S["Como criar o site"]
+  subgraph agora["Bloqueiam o primeiro deploy"]
+    N["Token e conta<br/>no GitHub"]
+    S["Conferir o<br/>fingerprint"]
   end
   subgraph logo["Afetam a Fase 1"]
     D2["D2 · email"]
     D10["D10 · staging"]
-    L["Onde vive a skill"]
+    K["Chave de<br/>criptografia"]
   end
   subgraph depois["Só se quiser as fases 3–5"]
     D4["D4 · registry próprio"]
@@ -42,22 +41,32 @@ flowchart LR
 | A7 | **Código nosso é cola, costura ou algo original — nunca infra, nunca substrato** | 13/11/2026 (reafirmada) | A regra da casa |
 | A8 | **Workers Paid e R2 ativos na conta** | 13/11/2026 | Informado pelo Hector; atende o pré-requisito do sandbox |
 | A9 | A documentação é **versionada no GitHub**, com os originais preservados em `docs/origem/` | 13/11/2026 | Pedido do Hector |
+| A10 | **Nomes:** Worker e D1 `hector-ai-platform`; R2 `hector-ai-platform-media` | 13/11/2026 | Aprovados pelo Hector. D1 criado (região ENAM, UUID no `wrangler.jsonc`); R2 criado |
+| A11 | **D1 — Domínio: o gratuito (`workers.dev`) por enquanto** | 13/11/2026 | Decisão do Hector. Consequência registrada abaixo |
+| A12 | **O deploy é feito pela skill `emdash-cicd`**, rodando no GitHub Actions | 13/11/2026 | Decisão do Hector. O ambiente de trabalho do agente não alcança a API da Cloudflare; o Actions alcança |
+| A13 | **Site criado a partir de `templates/starter-cloudflare`** (cópia do zip + versões publicadas), na raiz do repositório | 13/11/2026 | O scaffolder oficial foi tentado e não conseguiu baixar o template neste ambiente. O resultado reproduz o que ele faria: mesma lógica de versões do `sync-templates-repo.mjs`, mesmo `pnpm-workspace.yaml` |
+| A14 | **D3 — Sandbox ligado desde o primeiro deploy** | 13/11/2026 | Workers Paid ativo (A8); `LOADER` + `sandboxRunner: sandbox()` |
+| A15 | **A skill nossa vive em `skills/emdash-cicd/`**, com link em `.claude/skills/`. Fora de `.agents/skills/` | 13/11/2026 | `.agents/skills/` é território do `upgrade-emdash`; até saber como ele trata skills alheias, a nossa fica fora |
+
+### Consequência de A11 (domínio gratuito)
+
+Sem `EMDASH_SITE_URL`, o setup grava como origem do site o endereço em que ele roda, e **as passkeys criadas ali só funcionam naquele endereço**. Quando você trocar para um domínio próprio, as passkeys do `workers.dev` deixam de valer no endereço novo. Não é grave, mas tem de ser planejado: antes da troca, ter email configurado (para entrar por magic link) ou cadastrar uma passkey nova no domínio novo seguindo o guia "Move to a New Domain" do EmDash. **[doc: `deployment/cloudflare.mdx`]**
 
 ## Pendentes — o que eu preciso de você
 
 Em ordem de urgência. Cada uma traz a recomendação e o que ela destrava.
 
-### Bloqueiam a Fase 1
+### Bloqueiam o primeiro deploy
 
-**Nomes dos recursos.**
-Proposta: Worker `hector-ai-platform`, banco D1 `hector-ai-platform`, bucket R2 `hector-ai-platform-media`. Trocar depois de provisionar é trabalhoso; trocar antes é uma linha.
+**Credenciais da Cloudflare no GitHub.** Só você pode fazer; o passo a passo está em [`02-instalacao.md`](02-instalacao.md#o-deploy-no-github-actions).
 
-**D1 — Domínio do site.**
-Qual endereço? Precisa estar ativo na mesma conta Cloudflare. Tem de estar resolvido **antes** do assistente de setup, por causa das passkeys. Sem domínio ainda, dá para começar no `workers.dev` definindo `EMDASH_SITE_URL` desde o início — mas aí é preciso saber qual será o domínio.
+1. Criar um token de API na Cloudflare com: Workers Scripts — Edit; D1 — Edit; Workers R2 Storage — Edit; Workers KV Storage — Edit.
+2. No GitHub, em *Settings → Secrets and variables → Actions*: secret `CLOUDFLARE_API_TOKEN` e variável `CLOUDFLARE_ACCOUNT_ID`.
+3. Rodar o workflow **Deploy** com a ação `status`, conferir o alvo, gravar a variável `EMDASH_TARGET_FINGERPRINT`.
+4. Rodar o workflow **Deploy** com a ação `deploy`.
+5. **Imediatamente depois:** abrir `/_emdash/admin/` e concluir o setup. A primeira pessoa a terminar vira administradora.
 
-**Como criar o site.**
-(a) Rodar o scaffolder oficial, `npm create emdash@latest`; ou (b) copiar `templates/starter-cloudflare` do repositório do EmDash e fixar as versões publicadas.
-Recomendação: (a), por ser o caminho oficial e já trazer skills e configuração de MCP. Em 13/11 a trava de segurança do ambiente bloqueou a execução do scaffolder; se bloquear de novo, (b) dá o mesmo resultado com mais passos manuais.
+**Chave de criptografia (`EMDASH_ENCRYPTION_KEY`).** Opcional no primeiro deploy; necessária antes de qualquer plugin guardar um setting secreto. Gera-se com `npx emdash secrets generate`; guarda-se como secret do GitHub (o workflow a envia ao Worker) **e** numa cópia sua, fora da Cloudflare.
 
 ### Afetam a Fase 1
 
@@ -65,20 +74,9 @@ Recomendação: (a), por ser o caminho oficial e já trazer skills e configuraç
 Sem provider, magic link, convite e recuperação de conta ficam **indisponíveis**. Com passkey você entra do mesmo jeito. Opções: Cloudflare Email Sending (pede domínio remetente verificado), SMTP externo, ou nada por enquanto.
 Recomendação: nada no primeiro deploy; Cloudflare Email Sending logo depois — o plugin `registry-workflows` vai precisar de `email:send`. Atenção: sem email, a única porta de entrada é a passkey; perdê-la sem ter outra cadastrada tranca o admin.
 
-**D3 — Sandbox já no primeiro deploy?**
-O pré-requisito (Workers Paid) está atendido — decisão A8.
-Recomendação: sim, criando o projeto com `--sandboxed-plugins`. Falta só a sua confirmação.
-
 **D10 — Staging.**
 Ambiente nomeado com D1 e R2 próprios, ou Worker Previews? A diferença está em [`02-instalacao.md`](02-instalacao.md#staging-e-previews).
 Recomendação: ambiente nomeado `preview`, com recursos próprios. É onde o primeiro run real do pipeline deve acontecer — o risco R10 pede um alvo descartável. A skill precisa ganhar suporte a `--wrangler-env` antes; é uma lacuna registrada.
-
-**Onde vive a nossa skill.**
-O scaffolder cria `.agents/skills/` com as skills upstream e um link `.claude/skills` apontando para lá. Hoje a nossa está em `skills/emdash-cicd/`, com um link próprio em `.claude/skills/emdash-cicd`. Os dois arranjos vão colidir quando o site for criado na raiz.
-Recomendação: manter `skills/emdash-cicd/` como casa (o `upgrade-emdash` mexe em `.agents/skills/`, e não quero a nossa skill no caminho dele) e, ao criar o site, acrescentar um link para ela dentro de `.agents/skills/`. Conferir antes como o `upgrade-emdash` trata skills que não são dele.
-
-**Site na raiz ou em subpasta.**
-Recomendação: na raiz — é o que o workflow oficial de deploy espera — com os plugins em `plugins/`.
 
 ### Só se você quiser as fases 3 a 5
 
@@ -111,7 +109,9 @@ Não são decisões suas — são coisas que eu ainda não sei e preciso estudar
 1. Como um plugin sandboxed lê dados de outro (o `whois` do `capability-portal` precisa das arestas do `entity-graph`).
 2. Como o `upgrade-emdash` trata skills em `.agents/skills/` que não são dele.
 3. Se o `wrangler d1 time-travel info --json`, usado pelo `backup-point.sh`, devolve o bookmark no campo que o script procura. Só um run real responde.
-4. Se o passo `wrangler deploy` do workflow oficial precisa do token no ambiente, como parece.
+4. Se o passo `wrangler deploy` do workflow oficial precisa do token no ambiente, como parece. (O nosso `deploy.yml` define o token para o job inteiro.)
+5. O scaffolder, com `--sandboxed-plugins`, só descomenta `worker_loaders`; a doc pede também `sandboxRunner: sandbox()` no `astro.config.mjs`. Acrescentei as duas coisas, seguindo a doc. Falta confirmar no site publicado que o catálogo aparece.
+6. O primeiro deploy cria sozinho o namespace KV `SESSION`? O `--dry-run` lista o binding sem ID; a doc diz que o Wrangler provisiona. Só o deploy confirma.
 
 ## Como registrar uma decisão nova
 

@@ -1,7 +1,7 @@
 ---
 name: emdash-cicd
 description: Orquestrar o pipeline de desenvolvimento, integração e deploy de um site EmDash em Cloudflare Workers, executando os gates de qualidade como código (preflight, gates locais, ponto de backup, deploy com migrations, verificação pós-deploy e retrospectiva). Baseia-se nas skills oficiais do repositório EmDash (building-emdash-site, emdash-cli, adversarial-reviewer, agent-browser, ux-acceptance-coordinator, upgrading-emdash) e as orquestra sem substituí-las. É uma SKILL VIVA: todo procedimento novo descoberto numa execução deve ser incorporado a ela via protocolo de atualização da seção "Skill Viva".
-version: 1.2.0
+version: 1.3.0
 living-skill: true
 update-protocol: CHANGELOG-required
 upstream-base: emdash-cms/emdash (skills/ e .agents/skills/)
@@ -70,6 +70,26 @@ Exige a URL real (`--url` ou `EMDASH_DEPLOY_URL` — nunca inferida: o endereço
 ### Estágio 7 — RETRO (`scripts/retro.sh`)
 Toda execução termina com um run record em `runs/`. Se surgiram procedimentos novos, comandos manuais não previstos, erros não cobertos pelos gates ou decisões ad-hoc, isto É um gap: aplicar o Protocolo Skill Viva abaixo ANTES de encerrar a tarefa.
 
+## 3-A. O pipeline no GitHub Actions
+
+Os workflows em `.github/workflows/` **não têm regra própria** — eles chamam estes mesmos scripts. O que passa localmente passa no CI, e vice-versa.
+
+| Workflow | Quando roda | O que faz |
+|---|---|---|
+| `ci.yml` | Todo push e pull request | Sintaxe dos scripts → `preflight.sh` → build → `gate-local.sh` → `wrangler deploy --dry-run` → confere version↔CHANGELOG da skill |
+| `deploy.yml`, ação `status` | Manual | Build + `emdash migrate --status`. Não muda nada. Publica o alvo e o fingerprint no resumo do job |
+| `deploy.yml`, ação `deploy` | Manual | `preflight.sh` → `gate-local.sh` → `deploy.sh` → secret da chave → `postdeploy.sh` → `retro.sh`; guarda `backups/`, o log e o run record como artefato por 90 dias |
+
+Sequência do primeiro deploy (e de todo deploy em que o alvo mudar):
+
+1. Rodar **status**. Ler a conta e o banco no resumo do job.
+2. Se forem os certos, gravar o fingerprint na variável `EMDASH_TARGET_FINGERPRINT`.
+3. Rodar **deploy**.
+
+O passo 2 é humano de propósito: é a guarda contra migrar o banco errado. Não automatizar.
+
+No runner, os logs vão para `$RUNNER_TEMP`, fora do checkout — `deploy.sh` exige árvore limpa. Os run records gerados no CI ficam no artefato, não no repositório; os de execuções locais são commitados.
+
 ## 4. Skill Viva — protocolo de atualização (parte do formato, não opcional)
 
 Esta skill nasce com qualidade porque os gates são código; **permanece** com qualidade porque se atualiza a cada execução. O formato é aberto a mudanças por design:
@@ -93,6 +113,7 @@ Esta skill nasce com qualidade porque os gates são código; **permanece** com q
 ## 6. Comandos rápidos
 
 ```bash
+# No GitHub: Actions → Deploy → Run workflow → status | deploy
 scripts/preflight.sh                  # ambiente + projeto + bindings prontos?
 scripts/gate-local.sh                 # todos os gates locais (espelham ci.yml)
 scripts/backup-point.sh               # bookmark Time Travel + evidências

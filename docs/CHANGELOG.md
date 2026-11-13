@@ -2,6 +2,17 @@
 
 Toda mudança em `docs/` entra aqui no mesmo commit. Convenção de versão em [`README.md`](README.md#versionamento). A skill `emdash-cicd` tem changelog próprio em `skills/emdash-cicd/CHANGELOG.md`.
 
+## [2.1.0] — 2026-11-13
+
+### Decisões registradas (`05-decisoes.md`)
+- A10 nomes; A11 domínio gratuito por enquanto, com a consequência para as passkeys; A12 deploy pela skill, no GitHub Actions; A13 site criado a partir do template; A14 sandbox ligado; A15 onde vive a skill.
+- Pendências reescritas: o que bloqueia agora é a configuração das credenciais no GitHub e a conferência do fingerprint.
+
+### Atualizado
+- `02-instalacao.md`: estado real da Fase 1; seção do GitHub Actions passa a descrever os workflows que existem, com a tabela de secrets e variáveis; nota sobre o que `--sandboxed-plugins` faz e não faz.
+- `README.md` e `AGENTS.md` da raiz: estado atual. O `AGENTS.md` ganha, ao final, o guia do site que vem do template.
+- Duas perguntas técnicas novas em aberto (sandbox no site publicado; provisionamento do KV `SESSION`).
+
 ## [2.0.0] — 2026-11-13
 
 Reorganização da série e revisão contra o código-fonte do EmDash (cópia de 12/11/2026).

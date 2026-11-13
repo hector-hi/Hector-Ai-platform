@@ -2,6 +2,27 @@
 
 Toda mudança nesta skill exige: (1) edição em SKILL.md/scripts/references, (2) bump de `version` no frontmatter do SKILL.md, (3) entrada aqui, na mesma mudança. Format: `Keep a Changelog`, semântica simples MAJOR.MINOR.PATCH (procedimento novo = MINOR, ajuste = PATCH, quebra de contrato de script = MAJOR).
 
+## [1.3.0] — 2026-11-13
+
+Primeira execução real de `preflight.sh` e `gate-local.sh`, contra o site criado neste repositório (EmDash 1.5.0). `backup-point.sh`, `deploy.sh` e `postdeploy.sh` **continuam sem run real** — dependem do primeiro deploy.
+
+### Added
+- Workflows do GitHub Actions (`.github/workflows/ci.yml` e `deploy.yml`) que executam os scripts da skill, e a seção 3-A do SKILL.md que os descreve. Fecha a lacuna registrada na 1.2.0.
+- Gate `wrangler deploy --dry-run` no CI: confere que o pacote monta e que os bindings estão todos lá, sem publicar.
+- `scripts/preflight.sh`: reconhece o wrangler instalado no projeto (antes só o global, e avisava à toa).
+
+### Fixed (achados da execução real)
+- `scripts/preflight.sh`: o aviso "backups não está no .gitignore" aparecia mesmo com `backups/` ignorado, porque o padrão só casa com diretório e o diretório não existe antes do primeiro deploy.
+- `scripts/preflight.sh`: versão do Node impressa como `vv22…`.
+- `scripts/preflight.sh`: em CI não avisa mais da falta de `.env` (lá a chave é secret do Worker).
+
+### Confirmado na execução real
+- A correção do gate `emdash doctor` da 1.2.0: no projeto D1 real o doctor reporta `database: not found` e `scheduler wiring: pass`; o gate passa.
+
+### Lacunas conhecidas
+- Ambientes nomeados do Wrangler continuam sem suporte (decisão D10).
+- Se `wrangler d1 time-travel info --json` devolve o bookmark no campo que `backup-point.sh` lê só o primeiro deploy dirá. A saída inteira é guardada de qualquer forma.
+
 ## [1.2.0] — 2026-11-13
 
 Revisão da skill contra o código-fonte do EmDash (CLI `migrate`/`doctor`, `reference/cli.mdx`, `deployment/cloudflare.mdx`, `deployment/core-migrations.mdx`). Nenhuma destas correções veio de um deploy real — vieram de leitura do código e de testes dos scripts contra um projeto-stub; o primeiro run real ainda vai validá-las.

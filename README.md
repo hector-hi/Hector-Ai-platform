@@ -11,9 +11,11 @@ O substrato já existe e é aberto: o [EmDash](https://github.com/emdash-cms/emd
 | O quê | Situação |
 |---|---|
 | Documentação (v2) | Pronta — [`docs/`](docs/README.md) |
-| Skill do pipeline `emdash-cicd` | v1.4.0 — [`skills/emdash-cicd/`](skills/emdash-cicd/SKILL.md). Cria o site, provisiona, instala os workflows e roda o pipeline por comando. Os checks já rodam de verdade; backup, deploy e pós-deploy ainda não |
+| Skill do pipeline `emdash-cicd` | v1.5.0 — [`skills/emdash-cicd/`](skills/emdash-cicd/SKILL.md). Cria o site, provisiona, instala os workflows e roda o pipeline por comando. Os checks já rodam de verdade; backup, deploy e pós-deploy ainda não |
 | Site EmDash (o Worker) | Criado na raiz (EmDash 1.5.0, sandbox ligado). Build e gates passam. **Ainda não publicado** |
 | Recursos Cloudflare | D1 `hector-ai-platform` e R2 `hector-ai-platform-media` criados. Worker ainda não |
+| Repositório principal | **Cloudflare Artifacts** (`hector-ai/hector-ai-platform`); o GitHub é espelho. Workers Builds ainda não conectado |
+| Domínio | `hector-ai.space` (ainda sem rota — entra após o primeiro deploy) |
 | Workflows do GitHub Actions | [`ci.yml`](.github/workflows/ci.yml) (gates em todo push) e [`deploy.yml`](.github/workflows/deploy.yml) (manual) |
 
 O próximo passo e o que ele espera de decisão estão em [`docs/05-decisoes.md`](docs/05-decisoes.md).

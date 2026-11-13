@@ -6,6 +6,7 @@
 |---|---|---|---|
 | Criar o site | `init-site.sh` | scaffolder oficial `create-emdash`; `scripts/sync-templates-repo.mjs` (versões) | Sim (exit 1/2) |
 | Provisionar | `provision.sh` | `core-migrations.mdx` ("Provision D1 before migrating it") | Sim (exit 1/3) |
+| Repositório | `artifacts.sh setup\|push\|status` | doc Cloudflare: Artifacts (git-protocol, wrangler) | Sim (exit 1/3) |
 | Workflows | `install-workflows.sh` | — (templates desta skill) | Sim em `--check` (exit 1) |
 | **Tudo, em ordem** | **`pipeline.sh check\|status\|deploy`** | orquestra os estágios abaixo; é o que CI e Deploy chamam | Sim — devolve o exit do estágio que falhou |
 | Preflight | `preflight.sh` | `building-emdash-site` (bindings/entry point) | Sim (exit 1/2) |

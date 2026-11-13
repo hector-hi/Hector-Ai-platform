@@ -2,6 +2,28 @@
 
 Toda mudança nesta skill exige: (1) edição em SKILL.md/scripts/references, (2) bump de `version` no frontmatter do SKILL.md, (3) entrada aqui, na mesma mudança. Format: `Keep a Changelog`, semântica simples MAJOR.MINOR.PATCH (procedimento novo = MINOR, ajuste = PATCH, quebra de contrato de script = MAJOR).
 
+## [1.5.0] — 2026-11-13
+
+Decisão do Hector: o pipeline usa o Cloudflare Artifacts como repositório principal e os recursos de build e deploy da Cloudflare; o GitHub fica como backup e evidência.
+
+### Added
+- `scripts/artifacts.sh setup|push|status` — cria o repositório no Artifacts, registra o remote, envia com token de vida curta passado por cabeçalho (nunca na URL), espelha em outro remote.
+- `references/artifacts.md` — o desenho (Artifacts → Workers Builds → `pipeline.sh deploy`; GitHub como espelho), o passo de conexão no painel, por que não o CI Workflow `@cloudflare/ci`, e o que falta verificar.
+
+### Fixed (achados de execução real contra a conta)
+- `pipeline.sh status` não extraía o fingerprint: o `emdash migrate` escreve o relatório no stderr.
+- `artifacts.sh`: a consulta ao repositório ganha uma segunda tentativa — a API do Artifacts falhou uma vez na primeira chamada e o script concluiu que o repositório não existia.
+
+### Executado de verdade nesta versão
+- `provision.sh --check`: reconheceu o D1 e o R2 existentes e o `database_id` do `wrangler.jsonc`.
+- `artifacts.sh setup`, `push --to main` e `status`: repositório `hector-ai/hector-ai-platform` criado e código enviado.
+- `pipeline.sh status`: alvo de migration lido (banco vazio, 97 migrations pendentes).
+
+### Ainda sem execução real
+- `pipeline.sh deploy` (backup, migrate, deploy, verify) — espera a conferência do alvo.
+- Qualquer build do Workers Builds — só pode ser conectado depois do primeiro deploy.
+- Registro das evidências de um deploy feito pelo Builds (ramo de registro no Artifacts) — não implementado.
+
 ## [1.4.0] — 2026-11-13
 
 A skill passa a conter, como comandos, tudo o que na sessão de 13/11 foi feito à mão: criar o site, provisionar, montar os workflows e encadear os estágios. Gap declarado pelo Hector: "que a skill contivesse esses comandos, para o agente não ter de fazer na mão e eu não ter de descrever toda vez; e o deploy apenas um primeiro CI, passando pelos mesmos checks".

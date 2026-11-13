@@ -42,7 +42,7 @@ flowchart LR
 | A8 | **Workers Paid e R2 ativos na conta** | 13/11/2026 | Informado pelo Hector; atende o pré-requisito do sandbox |
 | A9 | A documentação é **versionada no GitHub**, com os originais preservados em `docs/origem/` | 13/11/2026 | Pedido do Hector |
 | A10 | **Nomes:** Worker e D1 `hector-ai-platform`; R2 `hector-ai-platform-media` | 13/11/2026 | Aprovados pelo Hector. D1 criado (região ENAM, UUID no `wrangler.jsonc`); R2 criado |
-| A11 | **D1 — Domínio: o gratuito (`workers.dev`) por enquanto** | 13/11/2026 | Decisão do Hector. Consequência registrada abaixo |
+| ~~A11~~ | ~~**D1 — Domínio: o gratuito (`workers.dev`) por enquanto**~~ *(substituída por A17)* | 13/11/2026 | Decisão do Hector. Consequência registrada abaixo |
 | A12 | **O deploy é feito pela skill `emdash-cicd`**, rodando no GitHub Actions | 13/11/2026 | Decisão do Hector. O ambiente de trabalho do agente não alcança a API da Cloudflare; o Actions alcança |
 | A13 | **Site criado a partir de `templates/starter-cloudflare`** (cópia do zip + versões publicadas), na raiz do repositório | 13/11/2026 | O scaffolder oficial foi tentado e não conseguiu baixar o template neste ambiente. O resultado reproduz o que ele faria: mesma lógica de versões do `sync-templates-repo.mjs`, mesmo `pnpm-workspace.yaml` |
 | A14 | **D3 — Sandbox ligado desde o primeiro deploy** | 13/11/2026 | Workers Paid ativo (A8); `LOADER` + `sandboxRunner: sandbox()` |
@@ -50,7 +50,10 @@ flowchart LR
 
 | A16 | **A skill é o manual executável:** tudo o que se faz para criar, provisionar, verificar e publicar é um comando dela. O deploy começa pelos mesmos checks do CI | 13/11/2026 | Pedido do Hector. Skill v1.4.0: `init-site.sh`, `provision.sh`, `install-workflows.sh`, `pipeline.sh` |
 
-### Consequência de A11 (domínio gratuito)
+| A17 | **Domínio: `hector-ai.space`**, comprado na Cloudflare. **Substitui A11.** `EMDASH_SITE_URL` definido antes do setup | 13/11/2026 | Decisão do Hector. As passkeys nascem no endereço definitivo |
+| A18 | **D11 — O repositório principal é o Cloudflare Artifacts; o Workers Builds dispara o pipeline; o GitHub é espelho e evidência** | 13/11/2026 | Decisão do Hector. Repositório `hector-ai/hector-ai-platform` criado; skill v1.5.0 (`artifacts.sh`). Optou-se pelo Workers Builds, não pelo CI Workflow sob medida, para não escrever um Worker de infra |
+
+### ~~Consequência de A11 (domínio gratuito)~~ — superada por A17
 
 Sem `EMDASH_SITE_URL`, o setup grava como origem do site o endereço em que ele roda, e **as passkeys criadas ali só funcionam naquele endereço**. Quando você trocar para um domínio próprio, as passkeys do `workers.dev` deixam de valer no endereço novo. Não é grave, mas tem de ser planejado: antes da troca, ter email configurado (para entrar por magic link) ou cadastrar uma passkey nova no domínio novo seguindo o guia "Move to a New Domain" do EmDash. **[doc: `deployment/cloudflare.mdx`]**
 
@@ -82,19 +85,11 @@ Recomendação: nada no primeiro deploy; Cloudflare Email Sending logo depois �
 Ambiente nomeado com D1 e R2 próprios, ou Worker Previews? A diferença está em [`02-instalacao.md`](02-instalacao.md#staging-e-previews).
 Recomendação: ambiente nomeado `preview`, com recursos próprios. É onde o primeiro run real do pipeline deve acontecer — o risco R10 pede um alvo descartável. A skill precisa ganhar suporte a `--wrangler-env` antes; é uma lacuna registrada.
 
-**D11 — Cloudflare Artifacts.** *(novo — sugestão do Hector em 13/11)*
+**Conectar o Workers Builds ao Artifacts.** Depois do primeiro deploy, um passo seu no painel, uma vez. A tabela de campos está em [`artifacts.md`](../skills/emdash-cicd/references/artifacts.md). Precisa de um token com D1 Edit — o que o Builds gera sozinho não tem.
 
-O que é **[fonte: docs e blog da Cloudflare, lidos por busca em 13/11/2026; a página de documentação em si não era alcançável do ambiente de trabalho]**: armazenamento versionado que fala Git. Dentro da conta há *namespaces*, e em cada um, repositórios Git de verdade — clone, push e pull com qualquer cliente Git, mais API REST e binding de Worker para criar, bifurcar e emitir tokens por repositório. Exige Workers Paid (A8 atende). Está em **beta aberto** desde outubro de 2026; a cobrança começou em 12/11/2026 — 1 GB incluído, depois US$ 0,50/GB-mês, mais operações (os valores de operação que achei são de abril e podem ter mudado). O Wrangler do projeto já traz `wrangler artifacts namespaces|repos` **[código: `wrangler artifacts --help`, v4.160]**.
+**Hostname: `hector-ai.space` ou `www.hector-ai.space`?** Assumi o domínio raiz (`EMDASH_SITE_URL` no `wrangler.jsonc`). Mudar é uma linha, mas só **antes** do setup.
 
-Onde ele se encaixa aqui — três usos, do mais seguro ao mais ambicioso:
-
-1. **Livro de bordo do pipeline.** Hoje as evidências de cada deploy (bookmark do Time Travel, manifesto de migrations, logs, run record) viram um artefato do GitHub que expira em 90 dias. Num repositório Artifacts elas ficam versionadas, sem prazo, na mesma conta do site: um commit por deploy. É o encaixe mais direto com o que o produto é, e não é infra nossa — é um `git push` a mais no fim do `pipeline.sh deploy`.
-2. **Espelho do repositório.** Um segundo `git remote` na sua conta Cloudflare. Tira o GitHub da posição de cópia única do código e das decisões.
-3. **Um repositório por coisa cadastrada.** A Cloudflare recomenda justamente "um repositório por projeto, usuário, sessão ou tarefa". Casa com a suíte: cadastrar um `app` ou um `agent` poderia, por um passo do `registry-workflows`, criar o repositório dele. Um plugin sandboxed não tem binding de Worker; teria de usar a API REST com `network:request` restrito ao host da Cloudflare. Precisa de estudo antes de prometer.
-
-O que **não** é: não substitui o R2 (mídia é blob, não árvore versionada) nem o backup do banco.
-
-Recomendação: adotar o uso 1 agora, como passo opcional da skill (liga com uma variável; sem ela, tudo segue como está); o uso 2 junto; deixar o uso 3 registrado para quando a suíte começar. Ressalva: é beta — as evidências continuam indo também para o artefato do GitHub até o produto estabilizar. **Espero o seu sim para implementar.**
+**Um repositório Artifacts por coisa cadastrada** (o terceiro uso do Artifacts). Fica para quando a suíte de plugins começar: cadastrar um `app` ou um `agent` criaria o repositório dele por um passo do `registry-workflows`, via API REST com `network:request` restrito. Precisa de estudo antes de prometer.
 
 ### Só se você quiser as fases 3 a 5
 

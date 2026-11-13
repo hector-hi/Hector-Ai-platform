@@ -108,7 +108,8 @@ case "$MODE" in
     stage preflight   "$SCRIPT_DIR/preflight.sh"          || exit $?
     stage build       $PNPM build                         || exit $?
     echo; echo "━━━━ alvo de migration (só leitura) ━━━━"
-    $PNPM --silent emdash migrate --status --wrangler-config wrangler.jsonc | tee "$LOGDIR/status.log"
+    # 2>&1: o CLI escreve o relatório no stderr; sem isso o fingerprint não chega ao log.
+    $PNPM --silent emdash migrate --status --wrangler-config wrangler.jsonc 2>&1 | tee "$LOGDIR/status.log"
     [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "PIPELINE: migrate --status falhou."; exit 1; }
     FP=$(grep -oE 'Target fingerprint: *[0-9a-f]{64}' "$LOGDIR/status.log" | grep -oE '[0-9a-f]{64}' | head -1)
     echo

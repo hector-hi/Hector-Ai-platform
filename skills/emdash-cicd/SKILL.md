@@ -1,7 +1,7 @@
 ---
 name: emdash-cicd
 description: Criar, provisionar, verificar e publicar um site EmDash em Cloudflare Workers com comandos prontos — do repositório vazio ao site no ar e a cada deploy seguinte. Usar sempre que for preciso criar o site, provisionar D1/R2, instalar os workflows de CI/Deploy, rodar os gates ou fazer deploy; os comandos estão em scripts/ e não devem ser refeitos à mão (init-site, provision, install-workflows, pipeline check|status|deploy, mais preflight, gates locais, ponto de backup, deploy com migrations, verificação pós-deploy e retrospectiva). Baseia-se nas skills oficiais do repositório EmDash (building-emdash-site, emdash-cli, adversarial-reviewer, agent-browser, ux-acceptance-coordinator, upgrading-emdash) e as orquestra sem substituí-las. É uma SKILL VIVA: todo procedimento novo descoberto numa execução deve ser incorporado a ela via protocolo de atualização da seção "Skill Viva".
-version: 1.4.0
+version: 1.5.0
 living-skill: true
 update-protocol: CHANGELOG-required
 upstream-base: emdash-cms/emdash (skills/ e .agents/skills/)
@@ -25,6 +25,15 @@ scripts/pipeline.sh check                # 4. todos os checks de dev + integraç
 # commit, push; token e conta no GitHub (humano); então, no Actions:
 #   Deploy → status   (mostra o alvo)   →   Deploy → deploy   (publica)
 ```
+
+**Onde o código mora** — o repositório principal é o Cloudflare Artifacts; o GitHub é espelho. Detalhes e o passo de conexão do Workers Builds em [references/artifacts.md](references/artifacts.md):
+
+```bash
+scripts/artifacts.sh setup                            # uma vez: cria o repositório e o remote "artifacts"
+scripts/artifacts.sh push --to main --mirror origin   # envia ao Artifacts e espelha no GitHub
+```
+
+Com o Workers Builds conectado, `push --to main` **é** o deploy: o Builds roda `pipeline.sh deploy`.
 
 **No dia a dia** — três comandos, um caminho só:
 
@@ -126,6 +135,7 @@ Esta skill nasce com qualidade porque os gates são código; **permanece** com q
 
 | Arquivo | Conteúdo |
 |---|---|
+| [references/artifacts.md](references/artifacts.md) | Artifacts como repositório principal, Workers Builds como gatilho, GitHub como espelho; o que falta verificar |
 | [references/primeiro-deploy.md](references/primeiro-deploy.md) | Do zero ao ar: os dez passos, os três que são humanos, e o quadro de falhas |
 | `templates/workflows/` | Fonte dos workflows do GitHub Actions (instalados por `install-workflows.sh`) |
 | [references/pipeline-detail.md](references/pipeline-detail.md) | Detalhe de cada estágio, variáveis de ambiente e códigos de saída |
@@ -140,6 +150,9 @@ Esta skill nasce com qualidade porque os gates são código; **permanece** com q
 scripts/init-site.sh --name <worker>  # site a partir do template oficial
 scripts/provision.sh [--check]        # D1 + R2 + database_id no wrangler.jsonc
 scripts/install-workflows.sh          # .github/workflows/ a partir dos templates
+
+# onde o código mora
+scripts/artifacts.sh setup|push|status  # Cloudflare Artifacts (principal) + espelho
 
 # o pipeline (sempre)
 scripts/pipeline.sh check             # dev + integração, sem tocar a Cloudflare

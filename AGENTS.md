@@ -29,11 +29,13 @@ O projeto é do Hector. Ele decide; o agente estuda, propõe, executa e relata. 
 
 ## Estado em 13/11/2026
 
+- **O repositório principal é o Cloudflare Artifacts** (`hector-ai/hector-ai-platform`, ramo `main`); o GitHub é espelho. Enviar com `skills/emdash-cicd/scripts/artifacts.sh push --to main --mirror origin`. O Workers Builds ainda não está conectado.
+- Domínio definitivo: `hector-ai.space` (`EMDASH_SITE_URL` no `wrangler.jsonc`). A rota do domínio entra depois de o Worker responder no `workers.dev`.
 - O site existe na raiz deste repositório (template `starter-cloudflare`, EmDash 1.5.0, sandbox ligado). Build, typecheck, `emdash doctor` e `wrangler deploy --dry-run` passam.
 - Na Cloudflare existem o banco D1 `hector-ai-platform` e o bucket R2 `hector-ai-platform-media`. **O Worker ainda não foi publicado.**
 - Os workflows `ci.yml` e `deploy.yml` existem. O deploy espera o Hector configurar no GitHub o secret `CLOUDFLARE_API_TOKEN` e a variável `CLOUDFLARE_ACCOUNT_ID`.
 - `backup-point.sh`, `deploy.sh` e `postdeploy.sh` **nunca rodaram num deploy real**. O primeiro run vai achar coisas — incorporá-las é o protocolo, não um acidente.
-- Caminho crítico: credenciais no GitHub → ação `status` → conferir o fingerprint → ação `deploy` → setup do admin imediatamente.
+- Caminho crítico: Hector confere o alvo (fingerprint) → `pipeline.sh deploy` → rota do domínio → setup do admin em `hector-ai.space` imediatamente → conectar o Workers Builds.
 
 ## Ao terminar uma sessão
 

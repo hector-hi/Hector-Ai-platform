@@ -2,6 +2,11 @@
 
 Toda mudança em `docs/` entra aqui no mesmo commit. Convenção de versão em [`README.md`](README.md#versionamento). A skill `emdash-cicd` tem changelog próprio em `skills/emdash-cicd/CHANGELOG.md`.
 
+## [2.3.0] — 2026-11-13
+
+- `05-decisoes.md`: A17 (domínio `hector-ai.space`, substitui A11, que fica riscada) e A18 (Artifacts como repositório principal, Workers Builds como gatilho, GitHub como espelho — resolve a pendência D11). Pendências novas: conectar o Workers Builds; apex ou `www`.
+- `README.md`, `AGENTS.md`: estado atual.
+
 ## [2.2.0] — 2026-11-13
 
 - `05-decisoes.md`: decisão A16 (a skill é o manual executável; o deploy começa pelos checks do CI) e pendência nova **D11 — Cloudflare Artifacts**, com o que é, três usos possíveis e uma recomendação à espera de resposta. O que bloqueia o primeiro deploy passa a apontar para o roteiro da skill.
